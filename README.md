@@ -2,7 +2,7 @@
 > Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
 ---
 
-![MAP](/data/map.png)
+![MAP](ExMAS/data/map.png)
 
 ExMAS allows you to match trips into attractive shared rides.
 
@@ -27,7 +27,7 @@ If you find this code useful in your research, please consider citing:
 
 ### Documentation
 
-* [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
+* [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/notebooks/ExMAS.ipynb)
 * [Configuration](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/01_Configuration.ipynb)
 * [Your own networks](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/02_Network_graphs.ipynb)
 * [You own demand](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/03_Demand_generation.ipynb)
