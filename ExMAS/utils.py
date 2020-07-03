@@ -54,7 +54,7 @@ KPIs_descriptions = ['total travel time of vehicles (with travellers only)',
 
 def make_paths(params):
     # call it whenever you change a city name, or main path
-    params.paths.main = ""
+    params.paths.main = "ExMAS"
     params.paths.data = os.path.join(params.paths.main, 'data')
     params.paths.params = os.path.join(params.paths.data, 'configs')
     params.paths.albatross = os.path.join(params.paths.data, 'albatross')  # albatross data
@@ -394,22 +394,4 @@ def plot_demand(inData, params, t0=None, vehicles=False, s=10):
 
 
 
-def init_log(sp, logger=None):
-    level = sp.get('logger_level', "INFO")
-    if level == 'INFO':
-        level == logging.INFO
-    elif level == 'WARNING':
-        level == logging.WARNING
-    elif level == 'CRITICAL':
-        level = logging.CRITICAL
-    if logger is None:
-        logging.basicConfig(stream=sys.stdout, format='%(asctime)s-%(levelname)s-%(message)s',
-                            datefmt='%d-%m-%y %H:%M:%S', level=level)
 
-        logger = logging.getLogger()
-
-        logger.setLevel(level)
-        return logging.getLogger(__name__)
-    else:
-        logger.setLevel(level)
-        return logger

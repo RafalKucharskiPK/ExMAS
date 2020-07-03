@@ -11,8 +11,8 @@ from dotmap import DotMap
 import os
 
 import ExMAS
-import ExMAS_utils
-from ExMAS_utils import inData as mData
+import ExMAS.utils
+from ExMAS.utils import inData as mData
 #from corona import *
 
 pd.options.mode.chained_assignment = None
@@ -79,8 +79,8 @@ def exploit_search_space(one_slice, *args):
             _params.nP = val
         else:
             _params[key] = val
-    inData.stats = ExMAS_utils.networkstats(inData)
-    inData = ExMAS_utils.generate_demand(inData, params)
+    inData.stats = ExMAS.utils.networkstats(inData)
+    inData = ExMAS.utils.generate_demand(inData, params)
     t0 = pd.Timestamp.now()
     inData = ExMAS.main(inData, _params, plot=False)
 
@@ -89,7 +89,7 @@ def exploit_search_space(one_slice, *args):
     ret = pd.concat([inData.sblts.res, pd.Series(stamp)])
 
     filename = "".join([c for c in str(stamp) if c.isalpha() or c.isdigit() or c == ' ']).rstrip().replace(" ", "_")
-    ret.to_frame().to_csv(os.path.join('data/results', filename + '.csv'))
+    ret.to_frame().to_csv(os.path.join('ExMAS/data/results', filename + '.csv'))
     print(filename, pd.Timestamp.now(), 'done')
     return 0
 
@@ -99,7 +99,7 @@ def exploit_search_space(one_slice, *args):
 ########
 
 
-def experiment(space=None, config = 'data/configs/default.json', workers=-1, replications = 1):
+def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-1, replications = 1):
     """
     Explores the search space `space` starting from base configuration from `config` using `workers` parallel threads`
     :param space:
@@ -109,12 +109,12 @@ def experiment(space=None, config = 'data/configs/default.json', workers=-1, rep
     :return: set of csvs in 'data/results`
     """
     inData = mData
-    params = ExMAS_utils.get_config(config)
+    params = ExMAS.utils.get_config(config)
     params.logger_level = 'CRITICAL'
     params.np = params.nP
     params.max_degree = 8
     params.t0 = pd.to_datetime('15:00')
-    inData = ExMAS_utils.load_G(inData, params, stats=False)
+    inData = ExMAS.utils.load_G(inData, params, stats=False)
     if space is None:
         search_space = full_space()
     else:

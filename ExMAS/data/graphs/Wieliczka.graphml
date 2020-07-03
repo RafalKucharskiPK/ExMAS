@@ -3011,7 +3011,7 @@
     <edge id="0" source="1967272027" target="1839512988">
       <data key="d9">[186030851, 173120103]</data>
       <data key="d10">Różana</data>
-      <data key="d11">['residential', 'unclassified']</data>
+      <data key="d11">['unclassified', 'residential']</data>
       <data key="d12">False</data>
       <data key="d13">1076.936</data>
       <data key="d14">LINESTRING (20.0292173 49.9902186, 20.0291346 49.9904615, 20.0290253 49.9906309, 20.0286447 49.9909821, 20.0281947 49.9912771, 20.0280054 49.9913841, 20.0274614 49.9917004, 20.0270689 49.9919293, 20.0266832 49.9921117, 20.0264917 49.9921798, 20.02621 49.9922412, 20.0259217 49.9923068, 20.0257243 49.9923799, 20.0254339 49.9924908, 20.0248877 49.9927303, 20.0247982 49.9927858, 20.0247328 49.9928704, 20.0247041 49.9929715, 20.024732 49.9931198, 20.024771 49.9933771, 20.02481 49.9936499, 20.0248698 49.99416, 20.0248142 49.9944243, 20.0246914 49.9949598, 20.0246842 49.9949987, 20.024648 49.9952162, 20.0245882 49.9954803, 20.024487 49.9959986, 20.0244525 49.9962828, 20.0243941 49.9965668, 20.0242522 49.997119, 20.024132 49.9976889, 20.0241003 49.9980412, 20.0239708 49.9984193, 20.0239696 49.9984597)</data>
@@ -3154,7 +3154,7 @@
     </edge>
     <edge id="0" source="1895215248" target="1852875389">
       <data key="d9">[270881072, 270881076]</data>
-      <data key="d10">['Górska', 'Czubinów']</data>
+      <data key="d10">['Czubinów', 'Górska']</data>
       <data key="d11">residential</data>
       <data key="d12">False</data>
       <data key="d13">267.829</data>
@@ -3844,7 +3844,7 @@
       <data key="d16">2</data>
       <data key="d10">Tadeusza Kościuszki</data>
       <data key="d11">tertiary</data>
-      <data key="d15">['40', '50']</data>
+      <data key="d15">['50', '40']</data>
       <data key="d12">False</data>
       <data key="d13">83.476</data>
       <data key="d14">LINESTRING (20.0416872 49.9925292, 20.041681 49.9927262, 20.0416656 49.9930262, 20.0416696 49.9932797)</data>
@@ -3859,7 +3859,7 @@
     </edge>
     <edge id="0" source="1947169057" target="1883510609">
       <data key="d9">[183868200, 55694400, 109398741]</data>
-      <data key="d10">['Świętej Barbary', 'Solna']</data>
+      <data key="d10">['Solna', 'Świętej Barbary']</data>
       <data key="d11">residential</data>
       <data key="d12">False</data>
       <data key="d13">248.634</data>
@@ -3979,7 +3979,7 @@
     <edge id="0" source="699818290" target="1111895812">
       <data key="d9">[683510563, 247805541, 55694733]</data>
       <data key="d16">2</data>
-      <data key="d10">['Edwarda Dembowskiego', 'Adama Mickiewicza']</data>
+      <data key="d10">['Adama Mickiewicza', 'Edwarda Dembowskiego']</data>
       <data key="d11">tertiary</data>
       <data key="d15">50</data>
       <data key="d12">False</data>
@@ -4268,7 +4268,7 @@
     </edge>
     <edge id="0" source="2053271929" target="2053271862">
       <data key="d9">[355442257, 194821115]</data>
-      <data key="d10">['Józefa Sowińskiego', 'Złota']</data>
+      <data key="d10">['Złota', 'Józefa Sowińskiego']</data>
       <data key="d11">residential</data>
       <data key="d12">False</data>
       <data key="d13">323.851</data>
@@ -6425,7 +6425,7 @@
     </edge>
     <edge id="0" source="1852050039" target="1852084044">
       <data key="d9">[194532884, 194532879]</data>
-      <data key="d10">['Magnoliowa', 'Leśna']</data>
+      <data key="d10">['Leśna', 'Magnoliowa']</data>
       <data key="d11">residential</data>
       <data key="d12">False</data>
       <data key="d13">143.37199999999999</data>
@@ -6742,8 +6742,8 @@
     </edge>
     <edge id="0" source="699816595" target="3436000010">
       <data key="d9">[569376738, 381984819, 177911079]</data>
-      <data key="d10">['Świętej Kingi', 'Strzelców Wielickich']</data>
-      <data key="d11">['residential', 'unclassified']</data>
+      <data key="d10">['Strzelców Wielickich', 'Świętej Kingi']</data>
+      <data key="d11">['unclassified', 'residential']</data>
       <data key="d12">False</data>
       <data key="d13">578.978</data>
       <data key="d14">LINESTRING (20.038644 49.99226, 20.0386748 49.9914212, 20.0385214 49.9913314, 20.0384423 49.9912759, 20.0384616 49.9900996, 20.0384622 49.9900656, 20.0384202 49.9900674, 20.0382159 49.9900681, 20.0378396 49.990039, 20.0376688 49.9900349, 20.0375553 49.9900321, 20.0374687 49.9900187, 20.0372077 49.9899782, 20.0371645 49.9899715, 20.0368043 49.9899045, 20.0362839 49.9898286, 20.0358387 49.9897769, 20.0354521 49.9897144, 20.034961 49.9897497, 20.0347101 49.9897354, 20.0343208 49.9896428, 20.0341125 49.9895849, 20.0340048 49.9895417)</data>
@@ -7142,7 +7142,7 @@
     <edge id="0" source="3436000010" target="699816595">
       <data key="d9">[569376738, 381984819, 177911079]</data>
       <data key="d10">['Strzelców Wielickich', 'Świętej Kingi']</data>
-      <data key="d11">['residential', 'unclassified']</data>
+      <data key="d11">['unclassified', 'residential']</data>
       <data key="d12">False</data>
       <data key="d13">578.9780000000001</data>
       <data key="d14">LINESTRING (20.0340048 49.9895417, 20.0341125 49.9895849, 20.0343208 49.9896428, 20.0347101 49.9897354, 20.034961 49.9897497, 20.0354521 49.9897144, 20.0358387 49.9897769, 20.0362839 49.9898286, 20.0368043 49.9899045, 20.0371645 49.9899715, 20.0372077 49.9899782, 20.0374687 49.9900187, 20.0375553 49.9900321, 20.0376688 49.9900349, 20.0378396 49.990039, 20.0382159 49.9900681, 20.0384202 49.9900674, 20.0384622 49.9900656, 20.0384616 49.9900996, 20.0384423 49.9912759, 20.0385214 49.9913314, 20.0386748 49.9914212, 20.038644 49.99226)</data>
@@ -8198,7 +8198,7 @@
     <edge id="0" source="248005617" target="34797864">
       <data key="d9">[198989227, 462555101]</data>
       <data key="d12">True</data>
-      <data key="d16">['1', '2']</data>
+      <data key="d16">['2', '1']</data>
       <data key="d17">94</data>
       <data key="d11">primary</data>
       <data key="d15">70</data>
@@ -8882,7 +8882,7 @@
       <data key="d16">2</data>
       <data key="d10">Tadeusza Kościuszki</data>
       <data key="d11">tertiary</data>
-      <data key="d15">['40', '50']</data>
+      <data key="d15">['50', '40']</data>
       <data key="d12">False</data>
       <data key="d13">83.476</data>
       <data key="d14">LINESTRING (20.0416696 49.9932797, 20.0416656 49.9930262, 20.041681 49.9927262, 20.0416872 49.9925292)</data>
@@ -10213,7 +10213,7 @@
     <edge id="0" source="1839512988" target="1967272027">
       <data key="d9">[186030851, 173120103]</data>
       <data key="d10">Różana</data>
-      <data key="d11">['residential', 'unclassified']</data>
+      <data key="d11">['unclassified', 'residential']</data>
       <data key="d12">False</data>
       <data key="d13">1076.9359999999997</data>
       <data key="d14">LINESTRING (20.0239696 49.9984597, 20.0239708 49.9984193, 20.0241003 49.9980412, 20.024132 49.9976889, 20.0242522 49.997119, 20.0243941 49.9965668, 20.0244525 49.9962828, 20.024487 49.9959986, 20.0245882 49.9954803, 20.024648 49.9952162, 20.0246842 49.9949987, 20.0246914 49.9949598, 20.0248142 49.9944243, 20.0248698 49.99416, 20.02481 49.9936499, 20.024771 49.9933771, 20.024732 49.9931198, 20.0247041 49.9929715, 20.0247328 49.9928704, 20.0247982 49.9927858, 20.0248877 49.9927303, 20.0254339 49.9924908, 20.0257243 49.9923799, 20.0259217 49.9923068, 20.02621 49.9922412, 20.0264917 49.9921798, 20.0266832 49.9921117, 20.0270689 49.9919293, 20.0274614 49.9917004, 20.0280054 49.9913841, 20.0281947 49.9912771, 20.0286447 49.9909821, 20.0290253 49.9906309, 20.0291346 49.9904615, 20.0292173 49.9902186)</data>
@@ -11488,7 +11488,7 @@
     </edge>
     <edge id="0" source="1111895812" target="699818290">
       <data key="d9">[683510563, 55694733, 247805541]</data>
-      <data key="d10">['Edwarda Dembowskiego', 'Adama Mickiewicza']</data>
+      <data key="d10">['Adama Mickiewicza', 'Edwarda Dembowskiego']</data>
       <data key="d11">tertiary</data>
       <data key="d15">50</data>
       <data key="d12">False</data>
@@ -11637,7 +11637,7 @@
       <data key="d16">1</data>
       <data key="d10">Powstania Styczniowego</data>
       <data key="d11">secondary</data>
-      <data key="d15">['70', '90']</data>
+      <data key="d15">['90', '70']</data>
       <data key="d13">78.449</data>
       <data key="d14">LINESTRING (20.0847404 49.9861265, 20.0849448 49.9860234, 20.0850228 49.9859707, 20.085033 49.9859522, 20.085061 49.9859107, 20.0850819 49.9858636, 20.0850863 49.9858063, 20.0850653 49.9857086, 20.085016 49.9855153)</data>
     </edge>
@@ -11654,7 +11654,7 @@
       <data key="d9">[107065436, 422540183]</data>
       <data key="d17">94</data>
       <data key="d11">primary</data>
-      <data key="d15">['70', '90']</data>
+      <data key="d15">['90', '70']</data>
       <data key="d12">False</data>
       <data key="d13">41.855000000000004</data>
       <data key="d14">LINESTRING (20.0847404 49.9861265, 20.0850377 49.986068, 20.0853044 49.9860262)</data>
@@ -11897,7 +11897,7 @@
     </edge>
     <edge id="0" source="1852084044" target="1852050039">
       <data key="d9">[194532884, 194532879]</data>
-      <data key="d10">['Magnoliowa', 'Leśna']</data>
+      <data key="d10">['Leśna', 'Magnoliowa']</data>
       <data key="d11">residential</data>
       <data key="d12">False</data>
       <data key="d13">143.37199999999999</data>
@@ -12612,7 +12612,7 @@
       <data key="d13">114.725</data>
       <data key="d14">LINESTRING (20.0569464 49.9890439, 20.0581762 49.9888283, 20.0585029 49.9887982)</data>
     </edge>
-    <data key="d0">2020-07-02 16:23:57</data>
+    <data key="d0">2020-07-03 14:05:39</data>
     <data key="d1">OSMnx 0.15.0</data>
     <data key="d2">epsg:4326</data>
     <data key="d3">True</data>

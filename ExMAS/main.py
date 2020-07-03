@@ -47,7 +47,9 @@ __email__ = "rafalkucharski.box _at_ gmail . com"
 import ast
 import math
 import time
+import sys
 from itertools import product
+import logging
 
 from dotmap import DotMap
 from enum import Enum
@@ -59,7 +61,7 @@ import pulp
 
 import matplotlib.pyplot as plt
 
-from ExMAS_utils import init_log
+
 pd.options.mode.chained_assignment = None
 np.warnings.filterwarnings('ignore')
 
@@ -1093,6 +1095,26 @@ def make_schedule(t, r):
     df.od = pd.Series(['o'] * len(ast.literal_eval(t.indexes)) + ['d'] * len(ast.literal_eval(t.indexes)))
     return df
 
+def init_log(sp, logger=None):
+    level = sp.get('logger_level', "INFO")
+    if level == 'INFO':
+        level == logging.INFO
+    elif level == 'WARNING':
+        level == logging.WARNING
+    elif level == 'CRITICAL':
+        level = logging.CRITICAL
+    if logger is None:
+        logging.basicConfig(stream=sys.stdout, format='%(asctime)s-%(levelname)s-%(message)s',
+                            datefmt='%d-%m-%y %H:%M:%S', level=level)
+
+        logger = logging.getLogger()
+
+        logger.setLevel(level)
+        return logging.getLogger(__name__)
+    else:
+        logger.setLevel(level)
+        return logger
+
 
 def fleet_size(requests):
     requests = requests.sort_values('start')
@@ -1159,18 +1181,18 @@ def assert_extension(_inData, params, degree=3, nchecks=4, t=None):
 
 if __name__ == "__main__":
 
-    import ExMAS_utils
+    import ExMAS.utils
 
-    params = ExMAS_utils.get_config('data/configs/default.json')
-    params = ExMAS_utils.make_paths(params)
+    params = ExMAS.utils.get_config('ExMAS/data/configs/default.json')
+    params = ExMAS.utils.make_paths(params)
 
     params.t0 = pd.Timestamp.now()
 
-    from ExMAS_utils import inData as inData
+    from ExMAS.utils import inData as inData
 
-    inData = ExMAS_utils.load_G(inData, params, stats=True)  # download the CITY graph
+    inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the CITY graph
 
-    inData = ExMAS_utils.generate_demand(inData, params)
+    inData = ExMAS.utils.generate_demand(inData, params)
 
     main(inData, params)
 
