@@ -18,6 +18,7 @@ import osmnx as ox
 import networkx as nx
 import numpy as np
 from osmnx.distance import get_nearest_node
+import matplotlib.pyplot as plt
 
 # DataFrame skeletons
 inData = DotMap()
@@ -145,8 +146,11 @@ def load_G(inData, _params=None, stats=False, set_t=True):
         inData.stats = networkstats(inData)  # calculate center of network, radius and central node
     return inData
 
+###########
+# RESULTS #
+###########
 
-def merge_csvs(params, path, to_numeric=True):
+def merge_csvs(params = None, path = None, to_numeric=True):
     """ merges csvs in one folder into a single DF"""
     import glob
 
@@ -165,6 +169,67 @@ def merge_csvs(params, path, to_numeric=True):
         res = res.apply(pd.to_numeric, errors='coerce')
 
     return res
+
+def make_KPIs(df, params):
+    df['$U_q$'] = -df.PassUtility_ns
+    df['$U_r$'] = -df.PassUtility
+    df['$T_q$'] = -df.VehHourTrav
+    df['$T_r$'] = -df.PassHourTrav
+    df['$\Delta T_r$'] = (df.VehHourTrav - df.VehHourTrav_ns)/df.VehHourTrav_ns
+    df['$\Delta T_q$'] = (df.PassHourTrav - df.PassHourTrav_ns)/df.PassHourTrav_ns
+    df['$\Delta U_r$'] = -(df.PassUtility - df.PassUtility_ns)/df.PassUtility_ns
+    df['$\Delta F$'] = -(df.fleet_size_nonshared- df.fleet_size_shared)/df.fleet_size_nonshared
+    df['$\Lambda_r$'] = df.lambda_shared
+    df['$\lambda$'] = df.shared_discount
+    df['$R$'] =(df.SINGLE + df.PAIRS + df.TRIPLES + df.QUADRIPLES)
+    df['$Q$'] = df.nP
+    df['$T$'] = df.horizon.apply(lambda x: 3600 if x == -1 else x)
+    df['occupancy'] = df.PassHourTrav/df.VehHourTrav
+    df['revenue_ns'] = df.VehHourTrav_ns*params.price
+    df['revenue_s'] = ((1-df.shared_ratio)*df.VehHourTrav_ns*params.price +
+                       df.shared_ratio*df.VehHourTrav_ns*params.price*(1-params.shared_discount))
+    df['$\Delta I$'] = (df['revenue_s'] - df['revenue_ns']) / df['revenue_ns']
+    return df
+
+
+def plot_paper(tp, figname='res.svg', x='nP', y='shared_ratio', y_label=None, y_lim=None, legend=True,
+               groupby=False, kind='line', stacked=False, ax=None, diag=False, path='../res/figs/'):
+    # plots x as a function of y grouped by groupby
+    save = False
+    tp = tp.sort_values(x)
+    # tp = tp.astype(float,errors = 'ignore')
+    tp = tp.set_index(x)
+    if groupby:
+        tp = tp.groupby(groupby)
+    if ax is None:
+        fig, ax = plt.subplots()
+        save = True
+    tp[y].plot(legend=legend, ax=ax, kind=kind, stacked=stacked)
+
+    ax.set_ylabel(y if y_label is None else y_label)
+    if y_lim is not None:
+        ax.set_ylim(y_lim)
+    ax.set_xlabel(x)
+    if diag:
+        lims = [ax.get_xlim(), ax.get_ylim()]
+
+        lims = min(lims[0][0], lims[1][0]), max(lims[0][1], lims[1][1])
+        ax.plot((lims[0], lims[1]), (lims[0], lims[1]), ls="--", c=".5", lw=1)
+    if groupby:
+        plt.legend(title=groupby)
+    if save:
+        plt.savefig(path + figname)
+    return ax
+
+
+def plot_paper_multi(tp, figname='res.svg', x='nP', ys=['$U_q$', '$U_r$'], path='', y_label='rel. diff.'):
+    fig, ax = plt.subplots()
+    for y in ys:
+        ax = plot_paper(tp, x=x, y=y, ax=ax)
+        ax.set_ylabel(y_label)
+    plt.savefig(path + figname)
+    plt.show()
+    return fig
 
 
 def networkstats(inData):
@@ -298,6 +363,34 @@ def mode_choices(_inData, sp):
     rides = rides[rides.max_prob_PT < 0.4]  # cut off function - dummy
     _inData.sblts.rides = rides
     return _inData
+
+
+def plot_demand(inData, params, t0=None, vehicles=False, s=10):
+    if t0 is None:
+        t0 = inData.requests.treq.mean()
+
+    # plot osmnx graph, its center, scattered nodes of requests origins and destinations
+    # plots requests temporal distribution
+    fig, ax = plt.subplots(1, 3, figsize = (12,4))
+    ((t0 - inData.requests.treq) / np.timedelta64(1, 'h')).plot.kde(title='Temporal distribution', ax=ax[0])
+    (inData.requests.ttrav / np.timedelta64(1, 'm')).plot(kind='box', title='Trips travel times [min]', ax=ax[1])
+    inData.requests.dist.plot(kind='box', title='Trips distance [m]', ax=ax[2])
+    # (inData.requests.ttrav / np.timedelta64(1, 'm')).describe().to_frame().T
+    plt.show()
+    fig, ax = ox.plot_graph(inData.G, figsize=(10, 10), node_size=0, edge_linewidth=0.5,
+                            show=False, close=False,
+                            edge_color='white')
+    for _, r in inData.requests.iterrows():
+        ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=s, marker='D')
+        ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=s)
+    if vehicles:
+        for _, r in inData.vehicles.iterrows():
+            ax.scatter(inData.G.nodes[r.pos]['x'], inData.G.nodes[r.pos]['y'], c='blue', s=s, marker='x')
+    ax.scatter(inData.G.nodes[inData.stats['center']]['x'], inData.G.nodes[inData.stats['center']]['y'], c='red',
+               s=10 * s, marker='+')
+    plt.title(
+        'Demand in {} with origins marked in green, destinations in orange and vehicles in blue'.format(params.city))
+    plt.show()
 
 
 

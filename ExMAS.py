@@ -61,6 +61,7 @@ import matplotlib.pyplot as plt
 
 from ExMAS_utils import init_log
 pd.options.mode.chained_assignment = None
+np.warnings.filterwarnings('ignore')
 
 
 ##########
@@ -319,7 +320,7 @@ def pairs(_inData, params, process=True, check=True, plot=False):
         else:
             _r.loc[r.set_index(['i', 'j']).index, 1] = 1
         sizes[title] = r.shape[0]
-        _inData.logger.info(r.shape[0]+ '\t', title)
+        _inData.logger.info(str(r.shape[0])+ '\t'+ title)
         mtx = _r[1].unstack().values
         axes[nCall].spy(mtx)
         axes[nCall].set_title(title)
@@ -507,7 +508,7 @@ def pairs(_inData, params, process=True, check=True, plot=False):
     #    r = r.query(q) #only profitable trips
 
     if plot:
-        _inData.logger.info(r.shape[0] + '\tLIFO pairs')
+        _inData.logger.info(str(r.shape[0]) + '\tLIFO pairs')
         sizes['LIFO'] = r.shape[0]
 
     if r.shape[0] > 0 and process:
@@ -552,7 +553,7 @@ def pairs(_inData, params, process=True, check=True, plot=False):
     if plot:
         if 'figname' in params.keys():
             plt.savefig(params.figname)
-        fig, ax = plt.subplots(figsize=(164,4))
+        fig, ax = plt.subplots(figsize=(4,4))
         pd.Series(sizes).plot(kind='barh', ax=ax, color='black') if plot else None
         ax.set_xscale('log')
         ax.invert_yaxis()
@@ -920,7 +921,7 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
 
     if plot:
         plt.rcParams['figure.figsize'] = [20, 3]
-        plt.imshow(m)
+        plt.imshow(m, cmap='Greys',  interpolation='nearest')
         # plt.spy(m, c = 'blue')
         plt.show()
 
@@ -1050,11 +1051,13 @@ def evaluate_shareability(_inData, params, plot=False):
         ax.set_ylabel("number of rides")
         ax.set_xlabel("time")
 
-        fsns.plot(drawstyle='steps', ax=ax)
-        fs.plot(drawstyle='steps', ax=ax)
+        fsns.plot(drawstyle='steps', ax=ax, label = 'non_shared', color = 'black')
+        fs.plot(drawstyle='steps', ax=ax, label = 'shared', color = 'grey')
         ax.set_xticks([])
+        plt.suptitle('fleet size proxy')
+        plt.legend()
 
-        plt.savefig('fleet.svg')
+
 
     _inData.logger.info(ret)
     _inData.sblts.res = pd.Series(ret)
@@ -1156,18 +1159,18 @@ def assert_extension(_inData, params, degree=3, nchecks=4, t=None):
 
 if __name__ == "__main__":
 
-    from ExMAS_utils import init_log, make_paths, get_config, load_G, generate_demand, inData
+    import ExMAS_utils
 
-    params = get_config('data/configs/default.json')
-    params = make_paths(params)
+    params = ExMAS_utils.get_config('data/configs/default.json')
+    params = ExMAS_utils.make_paths(params)
 
     params.t0 = pd.Timestamp.now()
 
     from ExMAS_utils import inData as inData
 
-    inData = load_G(inData, params, stats=True)  # download the CITY graph
+    inData = ExMAS_utils.load_G(inData, params, stats=True)  # download the CITY graph
 
-    inData = generate_demand(inData, params, avg_speed=False)
+    inData = ExMAS_utils.generate_demand(inData, params)
 
     main(inData, params)
 
