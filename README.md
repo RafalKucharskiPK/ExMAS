@@ -16,7 +16,7 @@ It computes:
 * KPIs of sharing
 * trip sharing attributes 
 
-ExMAS is a `python` based open-source package. 
+ExMAS is a `python` based open-source package applicable to general networks and demand patterns.
 
 If you find this code useful in your research, please consider citing: _Kucharski R. , Cats. O 2020. Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations, Transportation Research Part B 139 (2020) 285-310_
 
