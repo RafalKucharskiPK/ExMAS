@@ -22,7 +22,7 @@ ExMAS is a `python` based open-source package applicable to general networks and
 
 If you find this code useful in your research, please consider citing:
 
->_Kucharski R. , Cats. O 2020. Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations, Transportation Research Part B 139 (2020) 285-310_
+>_Kucharski R. , Cats. O 2020. Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations, Transportation Research Part B 139 (2020) 285-310_ [https://doi.org/10.1016/j.trb.2020.06.006](https://doi.org/10.1016/j.trb.2020.06.006)
 
 
 [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
