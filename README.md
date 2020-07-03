@@ -27,6 +27,22 @@ If you find this code useful in your research, please consider citing:
 
 [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
 
+### Documentation
+
+* [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
+* [Configuration](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/01 Configuration.ipynb)
+* [Your own networks](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/02 Network graphs.ipynb)
+* [You own demand](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/03 Demand generation.ipynb)
+* [Bigger demand levels](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/04 Real demand size.ipynb)
+* [Parallel experiments and plotting results](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/05 Parallel experiments.ipynb)
+* [Completeness test](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/06 Completeness test.ipynb)
+
+### Installation
+
+`pip install ExMAS`
+
+or clone this repository
+
 ----
 Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
 
