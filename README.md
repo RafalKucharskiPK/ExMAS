@@ -3,6 +3,7 @@
 ---
 
 ExMAS allows you to match trips into attractive shared rides.
+[MAP](/data/map.png)
 
 For a given:
 * network (`osmnx` graph), 
