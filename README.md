@@ -2,8 +2,9 @@
 > Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
 ---
 
-ExMAS allows you to match trips into attractive shared rides.
 ![MAP](/data/map.png)
+
+ExMAS allows you to match trips into attractive shared rides.
 
 For a given:
 * network (`osmnx` graph), 
