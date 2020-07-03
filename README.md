@@ -8,7 +8,7 @@ ExMAS allows you to match trips into attractive shared rides.
 
 For a given:
 * network (`osmnx` graph), 
-* demand (microscopic set of trips $q_i = (o_i, d_i, t_i)$)
+* demand (microscopic set of trips _q_i = (o_i, d_i, t_i)_)
 * parameters (behavioural, like _willingness-to-share_ and system like _discount_ for shared rides)
 
 It computes:
