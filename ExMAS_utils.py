@@ -1,18 +1,23 @@
+#!/usr/bin/env python3
+
+"""
+Functions used within ExMAS
+"""
+
 import os
+import sys
+# utils
 import json
-import pandas as pd
 import random
 import math
 import logging
-import sys
-
+from dotmap import DotMap
+# side packages
+import pandas as pd
 import osmnx as ox
 import networkx as nx
 import numpy as np
-
-from dotmap import DotMap
 from osmnx.distance import get_nearest_node
-
 
 # DataFrame skeletons
 inData = DotMap()
@@ -22,30 +27,29 @@ inData['requests'] = pd.DataFrame(
     columns=['pax', 'origin', 'destination', 'treq', 'tdep', 'ttrav', 'tarr', 'tdrop']).set_index(
     'pax')  # to do - move results into simenv
 
-
+# definitions for KPIs
 KPIs_descriptions = ['total travel time of vehicles (with travellers only)',
                      'as above yet in non-shared scenarion ',
                      'total travel time of passengers',
                      'as above yet in non-shared scenarion ',
                      'total (dis)utility of passengers',
                      'as above yet in non-shared scenarion ',
-                     'vehicle time reduction',
-                     'vehicle costs reduction',
-                     'total fares',
+                     'mean vehicle cost reduction (lambda) over shared rides',
+                     'total fares paid by travellers sharing',
                      'as above yet in non-shared scenarion ',
-                     'total revenues',
+                     'relative revenue reduction',
+                     'number of trips',
+                     'number of single rides in the solution',
+                     '2nd degree rides in the solution',
+                     '3rd degree rides in the solution',
+                     '4th degree rides in the solution',
+                     '5th degree rides in the solution',
+                     'rides of degree greater than 5 in the solution',
+                     'what portion of rides were shared',
+                     'proxy for the fleet size (lower bound)',
                      'as above yet in non-shared scenarion ',
-                      'maximal discount to be offered while profitable',
-                      'number of trips','number of single rides in the solution',
-                      '2nd degree rides in the solution',
-                      '3rd degree rides in the solution',
-                      '4th degree rides in the solution',
-                      '5th degree rides in the solution',
-                      'rides of degree greater than 5 in the solution',
-                      'how many rides were shared' ,
-                      'proxy for the fleet size (lower bound)' ,
-                      'as above yet in non-shared scenarion ' ,
-                      'maximal discount to be offered while profitable' , 'sys' , 'sys']
+                     'maximal discount to be offered while profitable', 'sys', 'sys']
+
 
 def make_paths(params):
     # call it whenever you change a city name, or main path
@@ -60,10 +64,6 @@ def make_paths(params):
 
     params.paths.postcodes = os.path.join(params.paths.data, 'postcodes',
                                           "PC4_Nederland_2015.shp")  # PCA4 codes shapefile
-
-    #params.paths.sblt = os.path.join(params.paths.data, 'sblt')  # sblt results
-
-
     return params
 
 
@@ -72,14 +72,14 @@ def get_config(path):
     # use as: params = get_config(config.json)
     with open(path) as json_file:
         data = json.load(json_file)
-        config =  DotMap(data)
+        config = DotMap(data)
     config['t0'] = pd.Timestamp('15:00')
     return config
 
 
-def save_config(_params, path = None):
+def save_config(_params, path=None):
     if path is None:
-        path = os.path.join(_params.paths.params,_params.NAME+".json")
+        path = os.path.join(_params.paths.params, _params.NAME + ".json")
     with open(path, "w") as write_file:
         json.dump(_params, write_file)
 
@@ -146,7 +146,7 @@ def load_G(inData, _params=None, stats=False, set_t=True):
     return inData
 
 
-def merge_csvs(params, path, to_numeric = True):
+def merge_csvs(params, path, to_numeric=True):
     """ merges csvs in one folder into a single DF"""
     import glob
 
@@ -264,7 +264,44 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     return _inData
 
 
-def init_log(sp, logger = None):
+def mode_choices(_inData, sp):
+    """
+    Compete with Transit.
+    Parameters needed:
+    params.shareability.PT_discount = 0.66
+    params.shareability.PT_beta = 1.3
+    params.shareability.PT_speed = 1/2
+    params.shareability.beta_prob = -0.5
+    params.shareability.probabilistic = False
+    inData.requests['timePT']
+    :param _inData:
+    :param sp:
+    :return:
+    """
+    rides = _inData.sblts.rides
+    r = _inData.sblts.requests
+
+    def get_probs(row, col='u_paxes'):
+        prob_SR = list()
+        for pax in range(len(row.indexes)):
+            denom = math.exp(sp.beta_prob * row.u_paxes[pax]) + math.exp(sp.beta_prob * row.uPTs[pax]) + math.exp(
+                sp.beta_prob * row.uns[pax])
+            prob_SR.append(math.exp(sp.beta_prob * row[col][pax]) / denom)
+        return prob_SR
+
+    rides['uPTs'] = rides.apply(lambda x: [r.loc[_].u_PT for _ in x.indexes], axis=1)  # utilities of PT alternatives
+    rides['uns'] = rides.apply(lambda x: [r.loc[_].u for _ in x.indexes], axis=1)  # utilities of non shared alternative
+
+    rides['prob_PT'] = rides.apply(lambda x: get_probs(x, col='uPTs'), axis=1)  # MNL probabilities to go for PT
+    rides['prob'] = rides.apply(lambda x: get_probs(x), axis=1)  # MNL probabilities to go for shared
+    rides['max_prob_PT'] = rides.apply(lambda x: 0 if len(x.indexes) == 1 else max(x.prob_PT), axis=1)
+    rides = rides[rides.max_prob_PT < 0.4]  # cut off function - dummy
+    _inData.sblts.rides = rides
+    return _inData
+
+
+
+def init_log(sp, logger=None):
     level = sp.get('logger_level', "INFO")
     if level == 'INFO':
         level == logging.INFO

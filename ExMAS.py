@@ -1,24 +1,72 @@
-from dotmap import DotMap
-import matplotlib
-import pandas as pd
-import matplotlib.pyplot as plt
-from enum import Enum
-import networkx as nx
-import numpy as np
-import pulp
-import time
-from itertools import product
+"""
+# ExMAS
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+---
+
+![MAP](/data/map.png)
+
+ExMAS allows you to match trips into attractive shared rides.
+
+For a given:
+* network (`osmnx` graph),
+* demand (microscopic set of trips $q_i = (o_i, d_i, t_i)$)
+* parameters (behavioural, like _willingness-to-share_ and system like _discount_ for shared rides)
+
+It computes:
+* optimal set of shared rides (results of bipartite matching with a given objective)
+* shareability graph
+* set of all feasible rides
+* KPIs of sharing
+* trip sharing attributes
+
+ExMAS is a `python` based open-source package applicable to general networks and demand patterns.
+
+If you find this code useful in your research, please consider citing:
+
+>_Kucharski R. , Cats. O 2020.
+Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations,
+Transportation Research Part B 139 (2020) 285-310_
+https://doi.org/10.1016/j.trb.2020.06.006
+
+
+[Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
+
+----
+Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
+"""
+
+
+
+__author__ = "Rafal Kucharski"
+__copyright__ = "Copyright 2020, TU Delft"
+__credits__ = ["Oded Cats, Arjan de Ruijter, Subodh Dubey, Nejc Gerzinic"]
+__version__ = "1.0.1"
+__maintainer__ = "Rafal Kucharski"
+__email__ = "rafalkucharski.box _at_ gmail . com"
+
 import ast
 import math
+import time
+from itertools import product
+
+from dotmap import DotMap
+from enum import Enum
+
+import numpy as np
+import pandas as pd
+import networkx as nx
+import pulp
+
+import matplotlib.pyplot as plt
+
 from ExMAS_utils import init_log
 pd.options.mode.chained_assignment = None
 
 
+##########
+# CONSTS #
+##########
 
-
-
-
-# CONSTANTS
 # columns of ride-candidates DataFrame
 RIDE_COLS = ['indexes', 'u_pax', 'u_veh', 'kind', 'u_paxes', 'times', 'indexes_orig', 'indexes_dest']
 
@@ -45,129 +93,93 @@ class SbltType(Enum):  # type of shared ride. first digit is the degree, second 
 ##############
 
 # ALGORITHM 3
-def calc_sblt(_inData, sp, plot=False):
+def main(_inData, params, plot=False):
     """
     main call
     :param _inData: input (graph, requests, .. )
-    :param sp: parameters
+    :param params: parameters
     :param plot: flag to plot charts for consecutive steps
     :return: inData.sblts.schedule - selecgted shared rides
     inData.sblts.rides - all ride candidates
     inData.sblts.res -  KPIs
     """
-    _inData.logger = init_log(sp)
+    _inData.logger = init_log(params)  # initialize console logger
 
+    _inData = single_rides(_inData, params) # prepare requests as a potential single rides
 
-    _inData = sblt_singles(_inData, sp)
     degree = 1
-    _inData.sblts.log.times[degree] = time.time()
 
-    _inData = sblt_pairs(_inData, sp, plot=plot)
+    _inData = pairs(_inData, params, plot=plot)
     degree = 2
-    _inData.sblts.log.times[degree] = time.time()
-    _inData.logger.warning('Degree {} \tCompleted')
+    _inData.logger.info('Degree {} \tCompleted'.format(degree))
 
-    if degree < sp.max_degree:
-        _inData = makeR1R2andGraph(_inData)
+    if degree < params.max_degree:
+        _inData = make_shareability_graph(_inData)
 
-        while degree < sp.max_degree and _inData.sblts.R[degree].shape[0] > 0:
-            _inData.logger.warning('trips to extend at degree {} : {}'.format(degree,
+        while degree < params.max_degree and _inData.sblts.R[degree].shape[0] > 0:
+            _inData.logger.info('trips to extend at degree {} : {}'.format(degree,
                                                                            _inData.sblts.R[degree].shape[0]))
-            _inData = extend_degree(_inData, sp, degree)
+            _inData = extend_degree(_inData, params, degree)
             degree += 1
-            _inData.logger.warning('Degree {} \tCompleted')
-        if degree == sp.max_degree:
-            _inData.logger.warning('Max degree reached {}'.format(degree))
-            _inData.logger.warning('Trips still possible to extend at degree {} : {}'.format(degree,
+            _inData.logger.info('Degree {} \tCompleted'.format(degree))
+        if degree == params.max_degree:
+            _inData.logger.info('Max degree reached {}'.format(degree))
+            _inData.logger.info('Trips still possible to extend at degree {} : {}'.format(degree,
                                                                                           _inData.sblts.R[degree].shape[0]))
         else:
-            _inData.logger.warning(('No more trips to exted at degree {}'.format(degree)))
+            _inData.logger.info(('No more trips to exted at degree {}'.format(degree)))
 
-    if sp.probabilistic is not DotMap() and sp.probabilistic:
-        _inData = mode_choices(_inData, sp)
 
     _inData.sblts.rides = _inData.sblts.rides.reset_index(drop=True)  # set index
     _inData.sblts.rides['index'] = _inData.sblts.rides.index  # copy index
 
-    if sp.get('without_matching', False):
+    if params.get('without_matching', False):
         return _inData  # quit before matching
     else:
-        _inData = matching(_inData, sp, plot=plot)
-        _inData.logger.warning('Calculations  completed')
-        _inData = evaluate_shareability(_inData, sp,  plot=plot)
+        _inData = matching(_inData, params, plot=plot)
+        _inData.logger.info('Calculations  completed')
+        _inData = evaluate_shareability(_inData, params, plot=plot)
 
         return _inData
-
-
-def mode_choices(_inData, sp):
-    """
-    Compete with Transit.
-    Parameters needed:
-    params.shareability.PT_discount = 0.66
-    params.shareability.PT_beta = 1.3
-    params.shareability.PT_speed = 1/2
-    params.shareability.beta_prob = -0.5
-    params.shareability.probabilistic = False
-    inData.requests['timePT']
-    :param _inData:
-    :param sp:
-    :return:
-    """
-    rides = _inData.sblts.rides
-    r = _inData.sblts.requests
-
-    def get_probs(row, col='u_paxes'):
-        prob_SR = list()
-        for pax in range(len(row.indexes)):
-            denom = math.exp(sp.beta_prob * row.u_paxes[pax]) + math.exp(sp.beta_prob * row.uPTs[pax]) + math.exp(
-                sp.beta_prob * row.uns[pax])
-            prob_SR.append(math.exp(sp.beta_prob * row[col][pax]) / denom)
-        return prob_SR
-
-    rides['uPTs'] = rides.apply(lambda x: [r.loc[_].u_PT for _ in x.indexes], axis=1)  # utilities of PT alternatives
-    rides['uns'] = rides.apply(lambda x: [r.loc[_].u for _ in x.indexes], axis=1)  # utilities of non shared alternative
-
-    rides['prob_PT'] = rides.apply(lambda x: get_probs(x, col='uPTs'), axis=1)  # MNL probabilities to go for PT
-    rides['prob'] = rides.apply(lambda x: get_probs(x), axis=1)  # MNL probabilities to go for shared
-    rides['max_prob_PT'] = rides.apply(lambda x: 0 if len(x.indexes) == 1 else max(x.prob_PT), axis=1)
-    rides = rides[rides.max_prob_PT < 0.4]  # cut off function - dummy
-    _inData.sblts.rides = rides
-    return _inData
-
 
 ########
 # CORE #
 ########
 
 
-def sblt_singles(_inData, sp):
-    heterogenic = sp.get('heterogenic', False)
+def single_rides(_inData, params):
+    """
+    prepare _inData.requests for calculations
+    :param _inData: 
+    :param params: parameters
+    :return: 
+    """
 
     def f_delta():
         # maximal possible delay of a trip (computed before join)
-        return (1 / sp.WtS - 1) * req.ttrav + \
-               (sp.price * sp.shared_discount * req.dist / 1000) / (req.VoT * sp.WtS)
+        return (1 / params.WtS - 1) * req.ttrav + \
+               (params.price * params.shared_discount * req.dist / 1000) / (req.VoT * params.WtS)
 
     def utility_PT():
-        # utility of trip with PT
-        if sp.PT_discount == DotMap() or sp.PT_beta == DotMap():
+        # utility of trip with PT - not used
+        if params.PT_discount == DotMap() or params.PT_beta == DotMap():
             return 999999
         else:
-            return sp.price * (1 - sp.PT_discount) * req.dist / 1000 + req.VoT * sp.PT_beta * req.timePT
+            return params.price * (1 - params.PT_discount) * req.dist / 1000 + req.VoT * params.PT_beta * req.timePT
 
-    req = _inData.requests.copy().sort_index()
-    t0 = req.treq.min()
     # prepare requests
+    req = _inData.requests.copy().sort_index()
+    t0 = req.treq.min() # set 0 as the earliest departure time
     req.treq = (req.treq - t0).dt.total_seconds().astype(int)  # recalc times for seconds starting from zero
-    req.ttrav = req.ttrav.dt.total_seconds().divide(sp.avg_speed).astype(int)  # recalc travel times using speed
+    req.ttrav = req.ttrav.dt.total_seconds().divide(params.avg_speed).astype(int)  # recalc travel times using speed
 
-    if heterogenic:
+    if params.get('heterogenic', False):
         pass
     else:
-        req['VoT'] = sp.VoT  # heterogeneity not applied
+        req['VoT'] = params.VoT  # heterogeneity not applied
 
     req['delta'] = f_delta()  # assign maximal delay in seconds
-    req['u'] = sp.price * req.dist / 1000 + req.VoT * req.ttrav
+    req['u'] = params.price * req.dist / 1000 + req.VoT * req.ttrav
     req = req.sort_values(['treq', 'pax_id'])  # sort
     req = req.reset_index()
 
@@ -177,96 +189,97 @@ def sblt_singles(_inData, sp):
     # output
     _inData.sblts.requests = req.copy()
     df = req.copy()
-    df['kind'] = SbltType.SINGLE.value
+    df['kind'] = SbltType.SINGLE.value  # assign a type for a ride
     df['indexes'] = df.index
-    df['times'] = df.apply(lambda x: [x.treq, x.ttrav], axis=1)
-    df = df[['indexes', 'u', 'ttrav', 'kind', 'times']]
+    df['times'] = df.apply(lambda x: [x.treq, x.ttrav], axis=1)  # sequence of travel times
+    df = df[['indexes', 'u', 'ttrav', 'kind', 'times']]  # columns to store as a shared ride
     df['indexes'] = df['indexes'].apply(lambda x: [x])
     df['u_paxes'] = df['u'].apply(lambda x: [x])
 
-    df.columns = ['indexes', 'u_pax', 'u_veh', 'kind', 'times', 'u_paxes']
+    df.columns = ['indexes', 'u_pax', 'u_veh', 'kind', 'times', 'u_paxes'] # synthax for the output rides
     df = df[['indexes', 'u_pax', 'u_veh', 'kind', 'u_paxes', 'times']]
-    df['indexes_orig'] = df.indexes
-    df['indexes_dest'] = df.indexes
+    df['indexes_orig'] = df.indexes  # copy order of origins for single rides
+    df['indexes_dest'] = df.indexes  # and dest
     df = df[RIDE_COLS]
 
-    _inData.sblts.SINGLES = df.copy()  # first from sinlge trips
+    _inData.sblts.SINGLES = df.copy()  # single trips
     _inData.sblts.log.sizes[1] = {'potential': df.shape[0], 'feasible': df.shape[0]}
     _inData.sblts.rides = df.copy()
-    _inData.sblts.R = dict()
-    _inData.sblts.R[1] = df.copy()
+
+    _inData.sblts.R = dict()  # all the feasible rides
+    _inData.sblts.R[1] = df.copy() # of a given degree
 
     return _inData
 
 
 # ALGORITHM 1
-def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
+def pairs(_inData, params, process=True, check=True, plot=False):
     """
     Identifies pair-wise shareable trips S_ij, i.e. for which utility of shared ride is greater than utility of
     non-shared ride for both trips i and j.
     First S_ij.FIFO2 trips are identified, i.e. sequence o_i,o_j,d_i,d_j.
-    Subsequently, from FIFO2 trips we identify LIFO2 trips, i.e.
+    Subsequently, from FIFO2 trips we identify LIFO2 trips, i.e. o_i,o_j,d_j,d_i
+
     :param _inData: main data structure, with .skim (node x node dist matrix) , .requests (with origin, dest and treq)
-    :param sp: .json populated dictionary of parameters
+    :param params: .json populated dictionary of parameters
     :param process: boolean flag to calculate measures at the end of calulations
     :param check: run test to make sure results are consistent
     :param plot: plot matrices illustrating the shareability
     :return: _inData with .sblts
     """
+    # input
+    req = _inData.sblts.requests.copy()  # work with single requests
 
-    req = _inData.sblts.requests.copy()
-    """
-    VECTORIZED FUNCTIONS TO QUICKLY COMPUTE FORMULAS ALONG THE DATAFRAME
-    """
-
+    #VECTORIZED FUNCTIONS TO QUICKLY COMPUTE FORMULAS ALONG THE DATAFRAME
     def utility_ns_i():
         # utility of non-shared trip i
-        return sp.price * r.dist_i / 1000 + r.VoT_i * r.ttrav_i
+        return params.price * r.dist_i / 1000 + r.VoT_i * r.ttrav_i
 
     def utility_ns_j():
         # utility of non shared trip j
-        return sp.price * r.dist_j / 1000 + r.VoT_j * r.ttrav_j
+        return params.price * r.dist_j / 1000 + r.VoT_j * r.ttrav_j
 
     def utility_sh_i():
         # utility of shared trip i
-        return (sp.price * (1 - sp.shared_discount) * r.dist_i / 1000 +
-                r.VoT_i * sp.WtS * (r.t_oo + sp.pax_delay + r.t_od + sp.delay_value * abs(r.delay_i)))
+        return (params.price * (1 - params.shared_discount) * r.dist_i / 1000 +
+                r.VoT_i * params.WtS * (r.t_oo + params.pax_delay + r.t_od + params.delay_value * abs(r.delay_i)))
 
     def utility_sh_j():
         # utility of shared trip j
-        return (sp.price * (1 - sp.shared_discount) * r.dist_j / 1000 +
-                r.VoT_j * sp.WtS * (r.t_od + r.t_dd + sp.pax_delay +
-                                    sp.delay_value * abs(r.delay_j)))
+        return (params.price * (1 - params.shared_discount) * r.dist_j / 1000 +
+                r.VoT_j * params.WtS * (r.t_od + r.t_dd + params.pax_delay +
+                                        params.delay_value * abs(r.delay_j)))
 
     def utility_i():
-        # difference u_i - u_ns_i
-        return (sp.price * r.dist_i / 1000 * sp.shared_discount
-                + r.VoT_i * (r.ttrav_i - sp.WtS * (r.t_oo + r.t_od + sp.pax_delay + sp.delay_value * abs(r.delay_i))))
+        # difference u_sh_i - u_ns_i (has to be positive)
+        return (params.price * r.dist_i / 1000 * params.shared_discount
+                + r.VoT_i * (r.ttrav_i - params.WtS * (r.t_oo + r.t_od + params.pax_delay + params.delay_value * abs(r.delay_i))))
 
     def utility_j():
-        # difference u_i - u_ns_i
-        return (sp.price * r.dist_j / 1000 * sp.shared_discount
-                + r.VoT_j * (r.ttrav_j - sp.WtS * (r.t_od + r.t_dd + sp.pax_delay + sp.delay_value * abs(r.delay_j))))
+        # difference u_sh_i - u_ns_i
+        return (params.price * r.dist_j / 1000 * params.shared_discount
+                + r.VoT_j * (r.ttrav_j - params.WtS * (r.t_od + r.t_dd + params.pax_delay + params.delay_value * abs(r.delay_j))))
 
     def utility_i_LIFO():
-        return (sp.price * r.dist_i / 1000 * sp.shared_discount
-                + r.VoT_i * (r.ttrav_i - sp.WtS * (
-                        r.t_oo + r.t_od + 2 * sp.pax_delay + r.t_dd + sp.delay_value * abs(r.delay_i))))
+        # utility of LIFO trip for i
+        return (params.price * r.dist_i / 1000 * params.shared_discount
+                + r.VoT_i * (r.ttrav_i - params.WtS * (
+                        r.t_oo + r.t_od + 2 * params.pax_delay + r.t_dd + params.delay_value * abs(r.delay_i))))
 
     def utility_j_LIFO():
-        # difference
-        return (sp.price * r.dist_i / 1000 * sp.shared_discount
-                + r.VoT_j * (r.ttrav_j - sp.WtS * (r.t_od + sp.delay_value * abs(r.delay_j))))
+        # utility of LIFO trip for i
+        return (params.price * r.dist_i / 1000 * params.shared_discount
+                + r.VoT_j * (r.ttrav_j - params.WtS * (r.t_od + params.delay_value * abs(r.delay_j))))
 
     def utility_sh_i_LIFO():
-        # utility of shared trip
-        return (sp.price * (1 - sp.shared_discount) * r.dist_i / 1000 +
-                r.VoT_i * sp.WtS * (r.t_oo + r.t_od + r.t_dd + 2 * sp.pax_delay + sp.delay_value * abs(r.delay_i)))
+        # difference u_sh_i_LIFO - u_ns_i
+        return (params.price * (1 - params.shared_discount) * r.dist_i / 1000 +
+                r.VoT_i * params.WtS * (r.t_oo + r.t_od + r.t_dd + 2 * params.pax_delay + params.delay_value * abs(r.delay_i)))
 
     def utility_sh_j_LIFO():
-        # utility of shared trip
-        return (sp.price * (1 - sp.shared_discount) * r.dist_j / 1000 +
-                r.VoT_j * sp.WtS * (r.t_od + sp.delay_value * abs(r.delay_j)))
+        # difference u_sh_j_LIFO - u_ns_j
+        return (params.price * (1 - params.shared_discount) * r.dist_j / 1000 +
+                r.VoT_j * params.WtS * (r.t_od + params.delay_value * abs(r.delay_j)))
 
     def query_skim(r, _from, _to, _col, _filter=True):
         """
@@ -276,7 +289,7 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         :param _to: column name in r designating destination
         :param _col: name of column in 'r' where matrix entries are stored
         :param _filter: do we filter the skim for faster queries (used always apart from the last query for LIFO2)
-        :return:
+        :return: attributes in r
         """
         #
         if _filter:
@@ -284,33 +297,29 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
                 r[_from].unique(), r[_to].unique()].unstack().to_frame()  # reduce the skim size for faster join
         else:
             skim = the_skim.unstack().to_frame()  # unstack and to_frame for faster column representation of matrix
+        # skim matrix is unstacked (column vector) with two indexes
         skim.index.names = ['o', 'd']  # unify names for join
         skim.index = skim.index.set_names("o", level=0)
         skim.index = skim.index.set_names("d", level=1)
 
-        # skim = skim.index.set_names("o", level=0)
-        # skim = skim.set_names("d", level=1)
-        # skim.index.levels[0].name = 'o'
-        # skim.index.levels[1].name = 'd'
         skim.columns = [_col]
-
+        # requests now has also two indexes
         r = r.set_index([_to, _from], drop=False)
         r.index = r.index.set_names("o", level=0)
         r.index = r.index.set_names("d", level=1)
-        # r.index.levels[0].name = 'o'
-        # r.index.levels[1].name = 'd'
-        return r.join(skim, how='left')  # get the travel times between origins
+
+        return r.join(skim, how='left')   # perform the jin to get the travel time for each request
 
     def sp_plot(_r, r, nCall, title):
         # function to plot binary shareability matrix at respective stages
         _r[1] = 0  # init boolean column
         if nCall == 0:
             _r.loc[r.index, 1] = 1  # initialize for first call
-            sizes['initial'] = sp.nP * sp.nP
+            sizes['initial'] = params.nP * params.nP
         else:
             _r.loc[r.set_index(['i', 'j']).index, 1] = 1
         sizes[title] = r.shape[0]
-        _inData.logger.warning(r.shape[0]+ '\t', title)
+        _inData.logger.info(r.shape[0]+ '\t', title)
         mtx = _r[1].unstack().values
         axes[nCall].spy(mtx)
         axes[nCall].set_title(title)
@@ -325,9 +334,9 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         assert the_skim.loc[t.destination_i, t.destination_j] == t.t_dd
         assert abs(int(
             nx.shortest_path_length(_inData.G, t.origin_i, t.origin_j,
-                                    weight='length') / sp.avg_speed) - t.t_oo) < 2
+                                    weight='length') / params.avg_speed) - t.t_oo) < 2
         assert abs(int(nx.shortest_path_length(_inData.G, t.origin_j, t.destination_i,
-                                               weight='length') / sp.avg_speed) - t.t_od) < 2
+                                               weight='length') / params.avg_speed) - t.t_od) < 2
         # and on the whole dataset
         try:
             assert (r.t_i - r.ttrav_i > -2).all()  # share time is not smaller than direct
@@ -361,9 +370,9 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
             assert the_skim.loc[t.destination_j, t.destination_i] == t.t_dd
             assert abs(int(
                 nx.shortest_path_length(_inData.G, t.origin_i, t.origin_j,
-                                        weight='length') / sp.avg_speed) - t.t_oo) < 2
+                                        weight='length') / params.avg_speed) - t.t_oo) < 2
             assert abs(int(nx.shortest_path_length(_inData.G, t.destination_j, t.destination_i,
-                                                   weight='length') / sp.avg_speed) - t.t_dd) < 2
+                                                   weight='length') / params.avg_speed) - t.t_dd) < 2
             assert (r.t_i + 3 - r.ttrav_i > 0).all()  # share time is not smaller than direct (3 seconds for rounding)
             assert (abs(r.delay_i) <= r.delta_i).all()  # is the delay within bounds
             assert (abs(r.delay_j) <= r.delta_j).all()
@@ -385,16 +394,14 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         return r[r.delay_j >= r.delta_j]
 
     if plot:
-        matplotlib.rcParams['figure.figsize'] = [16, 4]
-        fig, axes = plt.subplots(1, 4)
-    else:
-        _r = None
+        fig, axes = plt.subplots(1, 4, figsize=(16,4))
+    _r = None
 
     sizes = dict()
     # MAIN CALULATIONS
-    _inData.logger.warning('Initializing pairwise trip shareability between {0} and {0} trips.'.format(sp.nP))
-    r = pd.DataFrame(index=pd.MultiIndex.from_product([req.index, req.index]))  # new df with a pariwise index
-    _inData.logger.warning('creating combinations')
+    _inData.logger.info('Initializing pairwise trip shareability between {0} and {0} trips.'.format(params.nP))
+    r = pd.DataFrame(index=pd.MultiIndex.from_product([req.index, req.index]))  # new df with a pairwise index
+    _inData.logger.info('creating combinations')
     cols = ['origin', 'destination', 'ttrav', 'treq', 'delta', 'dist', 'VoT']
     r[[col + "_i" for col in cols]] = req.loc[r.index.get_level_values(0)][cols].set_index(r.index)  # assign columns
     r[[col + "_j" for col in cols]] = req.loc[r.index.get_level_values(1)][cols].set_index(r.index)  # time consuming
@@ -402,13 +409,12 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
     r['i'] = r.index.get_level_values(0)  # assign index to columns
     r['j'] = r.index.get_level_values(1)
     r = r[~(r.i == r.j)]  # remove diagonal
-    _inData.logger.warning(str(r.shape[0]) + '\t nR*(nR-1)')
+    _inData.logger.info(str(r.shape[0]) + '\t nR*(nR-1)')
     _inData.sblts.log.sizes[2] = {'potential': r.shape[0]}
 
     # first condition (before querying any skim)
-    # TESTED - WORKS!#
-    if sp.horizon > 0:
-        r = r[abs(r.treq_i - r.treq_j) < sp.horizon]
+    if params.horizon > 0:
+        r = r[abs(r.treq_i - r.treq_j) < params.horizon]
     q = '(treq_j + delta_j >= treq_i - delta_i)  & (treq_j - delta_j <= (treq_i + ttrav_i + delta_i))'
     r = r.query(q)  # this reduces the size of matrix quite a lot
     if plot:
@@ -422,7 +428,7 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
     # make the skim smaller  (query only between origins and destinations)
     skim_indices = list(set(r.origin_i.unique()).union(r.origin_j.unique()).union(
         r.destination_j.unique()).union(r.destination_j.unique()))  # limit skim to origins and destination only
-    the_skim = _inData.skim.loc[skim_indices, skim_indices].div(sp.avg_speed).astype(int)
+    the_skim = _inData.skim.loc[skim_indices, skim_indices].div(params.avg_speed).astype(int)
     _inData.the_skim = the_skim
 
     r = query_skim(r, 'origin_i', 'origin_j', 't_oo')  # add t_oo to main dataframe (r)
@@ -435,8 +441,8 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
     r['delay_i'] = r.apply(lambda x: min(abs(x.delay / 2), x.delta_i, x.delta_j) * (1 if x.delay < 0 else -1), axis=1)
     r['delay_j'] = r.delay + r.delay_i
 
-    r = r[abs(r.delay_j) <= r.delta_j / sp.delay_value]  # filter for acceptable
-    r = r[abs(r.delay_i) <= r.delta_i / sp.delay_value]
+    r = r[abs(r.delay_j) <= r.delta_j / params.delay_value]  # filter for acceptable
+    r = r[abs(r.delay_i) <= r.delta_i / params.delay_value]
     if plot:
         sp_plot(_r, r, 1, 'origins shareability')
     if len(r) == 0:
@@ -463,7 +469,7 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         return _inData
 
     # profitability
-    r['ttrav'] = r.t_oo + r.t_od + r.t_dd + 2 * sp.pax_delay
+    r['ttrav'] = r.t_oo + r.t_od + r.t_dd + 2 * params.pax_delay
 
     r = r.set_index(['i', 'j'], drop=False)  # done - final result of pair wise FIFO shareability
 
@@ -477,10 +483,10 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         r['u_i'] = utility_sh_i()
         r['u_j'] = utility_sh_j()
 
-        r['t_i'] = r.t_oo + r.t_od + sp.pax_delay
-        r['t_j'] = r.t_od + r.t_dd + sp.pax_delay
-        r['delta_ij'] = r.apply(lambda x: x.delta_i - sp.delay_value * abs(x.delay_i) - (x.t_i - x.ttrav_i), axis=1)
-        r['delta_ji'] = r.apply(lambda x: x.delta_j - sp.delay_value * abs(x.delay_j) - (x.t_j - x.ttrav_j), axis=1)
+        r['t_i'] = r.t_oo + r.t_od + params.pax_delay
+        r['t_j'] = r.t_od + r.t_dd + params.pax_delay
+        r['delta_ij'] = r.apply(lambda x: x.delta_i - params.delay_value * abs(x.delay_i) - (x.t_i - x.ttrav_i), axis=1)
+        r['delta_ji'] = r.apply(lambda x: x.delta_j - params.delay_value * abs(x.delay_j) - (x.t_j - x.ttrav_j), axis=1)
         r['delta'] = r[['delta_ji', 'delta_ij']].min(axis=1)
         r['u_pax'] = r['u_i'] + r['u_j']
         check_me_FIFO() if check else None
@@ -495,13 +501,13 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
     r = r[utility_i_LIFO() > 0]
     r = r[utility_j_LIFO() > 0]
     r = r.set_index(['i', 'j'], drop=False)
-    r['ttrav'] = r.t_oo + r.t_od + r.t_dd + 2 * sp.pax_delay
+    r['ttrav'] = r.t_oo + r.t_od + r.t_dd + 2 * params.pax_delay
     # if sp.profitability:
     #    q = '(1 - ttrav/(ttrav_i+ttrav_j)) >{}'.format(sp.shared_discount)
     #    r = r.query(q) #only profitable trips
 
     if plot:
-        _inData.logger.warning(r.shape[0] + '\tLIFO pairs')
+        _inData.logger.info(r.shape[0] + '\tLIFO pairs')
         sizes['LIFO'] = r.shape[0]
 
     if r.shape[0] > 0 and process:
@@ -514,11 +520,11 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
         r['u_i'] = utility_sh_i_LIFO()
         r['u_j'] = utility_sh_j_LIFO()
 
-        r['t_i'] = r.t_oo + r.t_od + r.t_dd + 2 * sp.pax_delay
+        r['t_i'] = r.t_oo + r.t_od + r.t_dd + 2 * params.pax_delay
         r['t_j'] = r.t_od
         r['delta_ij'] = r.apply(
-            lambda x: x.delta_i - sp.delay_value * abs(x.delay_i) - (x.t_oo + x.t_od + x.t_dd - x.ttrav_i), axis=1)
-        r['delta_ji'] = r.apply(lambda x: x.delta_j - sp.delay_value * abs(x.delay_j), axis=1)
+            lambda x: x.delta_i - params.delay_value * abs(x.delay_i) - (x.t_oo + x.t_od + x.t_dd - x.ttrav_i), axis=1)
+        r['delta_ji'] = r.apply(lambda x: x.delta_j - params.delay_value * abs(x.delay_j), axis=1)
         r['delta'] = r[['delta_ji', 'delta_ij']].min(axis=1)
         r['u_pax'] = r['u_i'] + r['u_j']
         check_me_LIFO() if check else None
@@ -536,19 +542,17 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
             df['u_paxes'] = df.apply(lambda x: [x.u_i, x.u_j], axis=1)
             df['u_veh'] = df.ttrav
             df['times'] = df.apply(
-                lambda x: [x.treq_i + x.delay_i, x.t_oo + sp.pax_delay, x.t_od, x.t_dd], axis=1)
+                lambda x: [x.treq_i + x.delay_i, x.t_oo + params.pax_delay, x.t_od, x.t_dd], axis=1)
 
             df = df[RIDE_COLS]
 
             _inData.sblts.rides = pd.concat([_inData.sblts.rides, df], sort=False)
-
-    _inData.logger.warning(str(float(r.shape[0]) / (sp.nP * (sp.nP - 1))) + ' total gain')
+    gain = (1 - float(r.shape[0]) / (params.nP * (params.nP - 1)))*100
+    _inData.logger.info('Reduction of feasible pairs by {:.2f}%'.format(gain))
     if plot:
-
-        if 'figname' in sp.keys():
-            plt.savefig(sp.figname)
-        matplotlib.rcParams['figure.figsize'] = [4, 4]
-        fig, ax = plt.subplots()
+        if 'figname' in params.keys():
+            plt.savefig(params.figname)
+        fig, ax = plt.subplots(figsize=(164,4))
         pd.Series(sizes).plot(kind='barh', ax=ax, color='black') if plot else None
         ax.set_xscale('log')
         ax.invert_yaxis()
@@ -557,12 +561,17 @@ def sblt_pairs(_inData, sp, process=True, check=True, plot=False):
     return _inData
 
 
-def makeR1R2andGraph(_inData):
+def make_shareability_graph(_inData):
+    """
+    Prepares the shareability graphs from trip pairs
+    :param _inData: inData.sblts.rides
+    :return: inDara.sblts.S
+    """
     rides = _inData.sblts.rides
     rides['degree'] = rides.apply(lambda x: len(x.indexes), axis=1)
 
     R2 = rides[rides.degree == 2].copy()
-    R2['i'] = R2.indexes.apply(lambda x: x[0])
+    R2['i'] = R2.indexes.apply(lambda x: x[0]) # for edge list
     R2['j'] = R2.indexes.apply(lambda x: x[1])
     R2 = R2.reset_index(drop=True)
     R2['index_copy'] = R2.index
@@ -574,7 +583,7 @@ def makeR1R2andGraph(_inData):
     return _inData
 
 
-def enumerateRideExtensions(r, S):
+def enumerate_ride_extensions(r, S):
     """
     r rides
     S graph
@@ -597,50 +606,62 @@ def enumerateRideExtensions(r, S):
 
 
 # ALGORITHM 2/3
-def extend_degree(_inData, sp, degree):
+def extend_degree(_inData, params, degree):
     R = _inData.sblts.R
 
-    dist_dict = _inData.sblts.requests.dist.to_dict()  # non-shared travel distances
-    ttrav_dict = _inData.sblts.requests.ttrav.to_dict()  # non-shared travel times
-    treq_dict = _inData.sblts.requests.treq.to_dict()  # non-shared travel times
-    VoT_dict = _inData.sblts.requests.VoT.to_dict()  # non-shared travel distances
+    # faster queries through dict
+    dist_dict = _inData.sblts.requests.dist.to_dict()  # distances
+    ttrav_dict = _inData.sblts.requests.ttrav.to_dict()  # travel times
+    treq_dict = _inData.sblts.requests.treq.to_dict()  # requests times
+    VoT_dict = _inData.sblts.requests.VoT.to_dict()  # valuoes of time
 
-    _inData.sblts.log.sizes[degree + 1] = dict()
     nPotential = 0
-    retR = list()  # output
+    retR = list()  # for output
 
     for _, r in R[degree].iterrows():  # iterate through all rides to extend
-        newtrips, nSearched = extend(r, _inData.sblts.S, R, sp, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict)
+        newtrips, nSearched = extend(r, _inData.sblts.S, R, params, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict)
         retR.extend(newtrips)
         nPotential += nSearched
 
     df = pd.DataFrame(retR, columns=['indexes', 'indexes_orig', 'u_pax', 'u_veh', 'kind',
-                                     'u_paxes', 'times', 'indexes_dest'])
+                                     'u_paxes', 'times', 'indexes_dest']) # data synthax for rides
 
     df = df[RIDE_COLS]
     df = df.reset_index()
-    _inData.logger.warning(str(df.shape[0]) + ' feasible extensions found')
-    _inData.sblts.log.sizes[degree + 1]['potential'] = nPotential
-    _inData.sblts.log.sizes[degree + 1]['feasible'] = df.shape[0]
+    _inData.logger.info('At degree {} feasible extensions found out of {} searched'.format(degree,
+                                                                                              df.shape[0],
+                                                                                              nPotential))
 
-    _inData.sblts.R[degree + 1] = df
+    _inData.sblts.R[degree + 1] = df # store output
     _inData.sblts.rides = pd.concat([_inData.sblts.rides, df], sort=False)
-    _inData.logger.warning(_inData.sblts.log.sizes[degree + 1])
     if df.shape[0] > 0:
-        assert_extension(_inData, sp, degree + 1)
+        assert_extension(_inData, params, degree + 1)
 
     return _inData
 
 
 # ALGORITHM 2 a
-def extend(r, S, R, sp, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
-    # deptimefun = lambda dep: sum([abs(dep + delay) for delay in delays]) #total
+def extend(r, S, R, params, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
+    """
+    extends a single ride of a given degree with all feasible rides of degree+1
+    calls trip_sharing_utility to test if ride is attractive
+    :param r: shared ride
+    :param S: graph
+    :param R: all rides of this degree
+    :param params: 
+    :param degree: 
+    :param dist_dict: 
+    :param ttrav_dict: 
+    :param treq_dict: 
+    :param VoT_dict: 
+    :return: 
+    """
     deptimefun = lambda dep: max([abs(dep + delay) for delay in delays])  # minmax
     deptimefun = np.vectorize(deptimefun)
     accuracy = 10
     retR = list()
     potential = 0
-    for extension in enumerateRideExtensions(r, S):  # all possible extensions
+    for extension in enumerate_ride_extensions(r, S):  # all possible extensions
         Eplus, Eminus, t, kind = list(), list(), list(), None
         E = dict()  # star extending r with q
         indexes_dest = r.indexes_dest.copy()
@@ -724,7 +745,7 @@ def extend(r, S, R, sp, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
             # first assume null delays
             feasible_flag = True
             for i in range(degree + 1):
-                if trip_sharing_utility(sp, dists[i], 0, ttrav[i], ttrav_ns[i], VoT[i]) < 0:
+                if trip_sharing_utility(params, dists[i], 0, ttrav[i], ttrav_ns[i], VoT[i]) < 0:
                     feasible_flag = False
                     break
             if feasible_flag:
@@ -748,12 +769,12 @@ def extend(r, S, R, sp, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
 
                 for i in range(degree + 1):
 
-                    u_paxes.append(trip_sharing_utility(sp, dists[i], delays[i], ttrav[i], ttrav_ns[i], VoT[i]))
+                    u_paxes.append(trip_sharing_utility(params, dists[i], delays[i], ttrav[i], ttrav_ns[i], VoT[i]))
                     if u_paxes[-1] < 0:
                         feasible_flag = False
                         break
                 if feasible_flag:
-                    re.u_paxes = [shared_trip_utility(sp, dists[i], delays[i], ttrav[i], VoT[i]) for i in
+                    re.u_paxes = [shared_trip_utility(params, dists[i], delays[i], ttrav[i], VoT[i]) for i in
                                   range(degree + 1)]
                     re.pos = pos
                     re.times = new_times
@@ -768,27 +789,26 @@ def extend(r, S, R, sp, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
     return retR, potential
 
 
-def matching(_inData, sp, plot=False, make_assertion=True):
+def matching(_inData, params, plot=False, make_assertion=True):
     """
     called from the main loop
     :param _inData:
     :param plot:
-    :param make_assertion:
-    :return:
+    :param make_assertion: check if results are consistent
+    :return: inData.sblts.schedule - selected rides (and keys to them in inData.sblts.requests)
     """
     rides = _inData.sblts.rides.copy()
     requests = _inData.sblts.requests.copy()
-    opt_outs = False
 
-    multi_platform_matching = sp.get('multi_platform_matching', False)
+    opt_outs = False
+    multi_platform_matching = params.get('multi_platform_matching', False)
     
     if not multi_platform_matching: # classic matching for single platform
-        selected = match(im=rides, r=requests, sp=sp, plot=plot,
+        selected = match(im=rides, r=requests, params=params, plot=plot,
                          make_assertion=make_assertion, logger = _inData.logger)
         rides['selected'] = pd.Series(selected)
 
-    else:  # matching to multipla platforms
-
+    else:  # matching to multiple platforms
         # select only rides for which all travellers are assigned to this platform
         rides['platform'] = rides.apply(lambda row: list(set(_inData.sblts.requests.loc[row.indexes].platform.values)),
                                         axis=1)
@@ -801,7 +821,7 @@ def matching(_inData, sp, plot=False, make_assertion=True):
         for platform in rides.platform.unique():
             if platform>=0:
                 platform_rides = rides[rides.platform == platform]
-                selected = match(im=platform_rides, r=requests[requests.platform == platform], sp=sp,
+                selected = match(im=platform_rides, r=requests[requests.platform == platform], params=params,
                                  plot=plot, make_assertion=False, logger = _inData.logger)
 
                 rides['selected'].update(pd.Series(selected))
@@ -849,12 +869,12 @@ def matching(_inData, sp, plot=False, make_assertion=True):
     return _inData
     
 
-def match(im, r, sp, plot=False, make_assertion=True, logger = None):
+def match(im, r, params, plot=False, make_assertion=True, logger = None):
     """
     main call of bipartite matching on a graph
     :param im: possible rides
     :param r: requests
-    :param sp: parameter (including objective function)
+    :param params: parameter (including objective function)
     :param plot:
     :param make_assertion: test the results at the end
     :return: rides, secelcted rides, reuests
@@ -872,16 +892,16 @@ def match(im, r, sp, plot=False, make_assertion=True, logger = None):
         im_indexes_inv[i] = index
 
     im['lambda_r'] = im.apply(
-        lambda x: sp.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
+        lambda x: params.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
         axis=1)
 
     im['PassHourTrav_ns'] = im.apply(lambda x: sum([r.loc[_].ttrav for _ in x.indexes]), axis=1)
 
     r = r.reset_index()
 
-    if sp.profitability:
-        im = im[im.lambda_r >= sp.shared_discount]
-        logger.warning('Out of {} trips  {} are directly profitable.'.format(r.shape[0],
+    if params.profitability:
+        im = im[im.lambda_r >= params.shared_discount]
+        logger.info('Out of {} trips  {} are directly profitable.'.format(r.shape[0],
                                                                     im.shape[0])) if logger is not None else None
 
     nR = r.shape[0]
@@ -892,9 +912,9 @@ def match(im, r, sp, plot=False, make_assertion=True, logger = None):
             ret[request_indexes[i]] = 1
         return ret
 
-    logger.warning('Matching {} trips to {} rides in order to minimize {}'.format(nR,
-                                                                         im.shape[0],
-                                                                         sp.matching_obj)) if logger is not None else None
+    logger.info('Matching {} trips to {} rides in order to minimize {}'.format(nR,
+                                                                               im.shape[0],
+                                                                               params.matching_obj)) if logger is not None else None
     im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
     m = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
 
@@ -913,7 +933,7 @@ def match(im, r, sp, plot=False, make_assertion=True, logger = None):
 
     variables = pulp.LpVariable.dicts("r", (i for i in im.index), cat='Binary')  # decision variables
 
-    cost_col = sp.matching_obj
+    cost_col = params.matching_obj
     if cost_col == 'degree':
         costs = im.indexes.apply(lambda x: -(10 ** len(x)))
     elif cost_col == 'u_pax':
@@ -930,7 +950,7 @@ def match(im, r, sp, plot=False, make_assertion=True, logger = None):
 
     prob.solve()  # main otpimization call
 
-    logger.warning('Problem solution: {}. \n'
+    logger.info('Problem solution: {}. \n'
           'Total costs for single trips:  {:13,} '
           '\nreduced by matching to: {:20,}'.format(pulp.LpStatus[prob.status], int(sum(costs[:nR])),
                                                     int(pulp.value(prob.objective)))) if logger is not None else None
@@ -942,16 +962,16 @@ def match(im, r, sp, plot=False, make_assertion=True, logger = None):
         i = int(variable.name.split("_")[1])
 
         locs[im_indexes_inv[i]] = (int(variable.varValue))
-        # _inData.logger.warning("{} = {}".format(int(variable.name.split("_")[1]), int(variable.varValue)))
+        # _inData.logger.info("{} = {}".format(int(variable.name.split("_")[1]), int(variable.varValue)))
 
     return locs
 
 
-def evaluate_shareability(_inData, sp, plot=False):
+def evaluate_shareability(_inData, params, plot=False):
     """
     Calc KPIs for the results of assigning trips to shared rides
     :param _inData:
-    :param sp:
+    :param params:
     :param plot:
     :return:
     """
@@ -974,15 +994,15 @@ def evaluate_shareability(_inData, sp, plot=False):
     ret['PassUtility'] = r.u_sh.sum()
     ret['PassUtility_ns'] = r.u.sum()
 
-    ret['Veh_Lambda_R'] = schedule.lambda_r.mean()
-    ret['Veh_Discount'] = 1 - schedule[schedule.kind > 1].u_veh.sum() / schedule[
+    #ret['mean_ride_lambda'] = schedule.lambda_r.mean()
+    ret['mean_lambda'] = 1 - schedule[schedule.kind > 1].u_veh.sum() / schedule[
         schedule.kind > 1].PassHourTrav_ns.sum()
 
-    ret['shared_fares'] = schedule[schedule.kind > 1].PassHourTrav_ns.sum() * sp.price * (
-            1 - sp.shared_discount)
-    ret['full_fares'] = schedule[schedule.kind == 1].PassHourTrav_ns.sum() * sp.price
-    ret['revenue_s'] = ret['shared_fares'] + ret['full_fares']
-    ret['revenue_ns'] = schedule.PassHourTrav_ns.sum() * sp.price
+    #ret['shared_fares'] = schedule[schedule.kind > 1].PassHourTrav_ns.sum() * sp.price * (
+    #       1 - sp.shared_discount)
+    #ret['full_fares'] = schedule[schedule.kind == 1].PassHourTrav_ns.sum() * sp.price
+    ret['revenue_s'] = schedule.PassHourTrav_ns.sum() * params.price * (1 - params.shared_discount)
+    ret['revenue_ns'] = schedule.PassHourTrav_ns.sum() * params.price
     ret['Fare_Discount'] = (ret['revenue_s'] - ret['revenue_ns']) / ret['revenue_ns']
 
     split = schedule.groupby('kind').sum()
@@ -1036,7 +1056,7 @@ def evaluate_shareability(_inData, sp, plot=False):
 
         plt.savefig('fleet.svg')
 
-    _inData.logger.warning(ret)
+    _inData.logger.info(ret)
     _inData.sblts.res = pd.Series(ret)
     return _inData
 
@@ -1045,17 +1065,17 @@ def evaluate_shareability(_inData, sp, plot=False):
 # UTILS #
 #########
 
-def trip_sharing_utility(sp, dist, dep_delay, ttrav, ttrav_ns, VoT):
+def trip_sharing_utility(params, dist, dep_delay, ttrav, ttrav_ns, VoT):
     # trip sharing utility for a trip, trips are shared only if this is positive.
     # difference
-    return (sp.price * dist / 1000 * sp.shared_discount
-            + VoT * (ttrav_ns - sp.WtS * (ttrav + sp.delay_value * abs(dep_delay))))
+    return (params.price * dist / 1000 * params.shared_discount
+            + VoT * (ttrav_ns - params.WtS * (ttrav + params.delay_value * abs(dep_delay))))
 
 
-def shared_trip_utility(sp, dist, dep_delay, ttrav, VoT):
+def shared_trip_utility(params, dist, dep_delay, ttrav, VoT):
     #  utility of a shared trip
-    return (sp.price * (1 - sp.shared_discount) * dist / 1000 +
-            VoT * sp.WtS * (ttrav + sp.delay_value * abs(dep_delay)))
+    return (params.price * (1 - params.shared_discount) * dist / 1000 +
+            VoT * params.WtS * (ttrav + params.delay_value * abs(dep_delay)))
 
 
 def make_schedule(t, r):
@@ -1085,13 +1105,13 @@ def fleet_size(requests):
     return ret.starts - ret.ends
 
 
-def assert_extension(_inData, sp, degree=3, nchecks=4, t=None):
+def assert_extension(_inData, params, degree=3, nchecks=4, t=None):
     """
     Function checks whether all the resulting extended trips are coreectly calculated.
     Checks if ride travel times are in line with skim times.
     Used to debug, can be made silent or inactive for speed up (though it is definitely not a killer in performance)
     :param _inData:
-    :param sp:
+    :param params:
     :param degree:
     :param nchecks:
     :param t:
@@ -1113,7 +1133,7 @@ def assert_extension(_inData, sp, degree=3, nchecks=4, t=None):
         for i in range(degree - 1):
             o1 = r.loc[os[i]].origin
             o2 = r.loc[os[i + 1]].origin
-            skim_times.append(the_skim.loc[o1, o2] + sp.pax_delay)
+            skim_times.append(the_skim.loc[o1, o2] + params.pax_delay)
         skim_times.append(the_skim.loc[r.loc[os[-1]].origin, r.loc[ds[0]].destination])
 
         for i in range(degree - 1):
@@ -1126,12 +1146,13 @@ def assert_extension(_inData, sp, degree=3, nchecks=4, t=None):
             # if nchecks == 0:
             # _inData.logger.warning(skim_times, t.times[1:])
         except AssertionError as error:
-            _inData.logger.warning('Assertion Error for extension')
+            _inData.logger.critical('Assertion Error for extension')
             # _inData.logger.warning(t)
-            _inData.logger.warning(sp.pax_delay)
+            _inData.logger.warning(params.pax_delay)
             _inData.logger.warning(skim_times)
             _inData.logger.warning(t.times[1:])
             assert skim_times == t.times[1:]
+
 
 if __name__ == "__main__":
 
@@ -1148,7 +1169,7 @@ if __name__ == "__main__":
 
     inData = generate_demand(inData, params, avg_speed=False)
 
-    calc_sblt(inData, params)
+    main(inData, params)
 
 
 
