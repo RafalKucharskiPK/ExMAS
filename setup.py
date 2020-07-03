@@ -9,7 +9,7 @@ setup(
     author='Rafal Kucharski',  # Type in your name
     author_email='rkucharski@pk.edu.pl',  # Type in your E-Mail
     url='https://github.com/RafalKucharskiPK/ExMAS',  # Provide either the link to your github or to your website
-    download_url='https://github.com/RafalKucharskiPK/ExMAS/archive/0.1.1.tar.gz',  # I explain this later on
+    download_url='https://github.com/RafalKucharskiPK/ExMAS/archive/0.9.9.tar.gz',  # I explain this later on
     keywords=['MaaS', 'transportation', 'shared mobility'],  # Keywords that define your package best
     install_requires=['networkx>=2.4',
                       'pandas==1.0.5',
