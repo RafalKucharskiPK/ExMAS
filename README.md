@@ -28,12 +28,12 @@ If you find this code useful in your research, please consider citing:
 ### Documentation
 
 * [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
-* [Configuration](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/01 Configuration.ipynb)
-* [Your own networks](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/02 Network graphs.ipynb)
-* [You own demand](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/03 Demand generation.ipynb)
-* [Bigger demand levels](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/04 Real demand size.ipynb)
-* [Parallel experiments and plotting results](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/05 Parallel experiments.ipynb)
-* [Completeness test](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/06 Completeness test.ipynb)
+* [Configuration](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/01_Configuration.ipynb)
+* [Your own networks](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/02_Network_graphs.ipynb)
+* [You own demand](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/03_Demand_generation.ipynb)
+* [Bigger demand levels](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/04_Real_demand_size.ipynb)
+* [Parallel experiments and plotting results](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/05_Parallel_experiments.ipynb)
+* [Completeness test](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/06_Completeness_test.ipynb)
 
 ### Installation
 
