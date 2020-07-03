@@ -1,5 +1,5 @@
 # ExMAS
-Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
 ---
 
 ExMAS allows you to match trips into attractive shared rides.
@@ -16,9 +16,15 @@ It computes:
 * KPIs of sharing
 * trip sharing attributes 
 
-ExMAS is a `python` based open-source package. If you find this code useful in your research, please consider citing: _Kucharski R. , Cats. O 2020. Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations, Transportation Research Part B 139 (2020) 285-310
+ExMAS is a `python` based open-source package. 
 
-* [Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
+If you find this code useful in your research, please consider citing: _Kucharski R. , Cats. O 2020. Exact matching of attractive shared rides (ExMAS) for system-wide strategic evaluations, Transportation Research Part B 139 (2020) 285-310_
+
+
+[Quickstart tutorial](https://github.com/RafalKucharskiPK/ExMAS/blob/master/notebooks/ExMAS.ipynb)
+
+----
+Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
 
 
 
