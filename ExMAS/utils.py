@@ -393,5 +393,67 @@ def plot_demand(inData, params, t0=None, vehicles=False, s=10):
     plt.show()
 
 
+def make_graph(requests, rides,
+               mu=0.5, plot=False,
+               figname=None, node_size=0.5,
+               ax=None, probabilities=False):
+    """
+    Creates a nextworkx shareability graph and plots it if needed
+    :param requests: inData.requests
+    :param rides: inData.sblts.rides or inData.sblts.schedule - depending if we want results of matching or potential shareability
+    :param mu: parameters for probabilites, not used
+    :param plot: flag to plot the graph (may take time for big networks)
+    :param figname: name to save fig
+    :param node_size:
+    :param ax:
+    :param probabilities: flag to cal probabilities
+    :return: networkX graph
+    """
+    if figname is not None:
+        _, ax = plt.subplots()
+    """ creates a graph from requests and rides, computes the probabilities"""
+    G = nx.Graph()
+    shift = 10 ** (round(math.log10(requests.shape[0])) + 1)
+    _rides = rides.copy()
+    _rides.index = _rides.index + shift
+    # two kinds of nodes
+    G.add_nodes_from(requests.index)
+    G.add_nodes_from(_rides.index)
+    # edges
+    edges = list()
+    for i, row in _rides.iterrows():
+        for j, pax in enumerate(row.indexes):
+            edges.append((i, pax, {'u': row.u_paxes[j]}))
+    # probabilities
+    df = pd.DataFrame(edges)
+    df.columns = ['ride', 'request', 'u']
+    if probabilities:
+        df['u'] = df.u.apply(lambda x: x['u'])
+        df['expu'] = df.u.apply(lambda x: math.exp(-mu * x))
+        requests['sum_u'] = df.groupby('request').expu.sum()
+        df['prob'] = df.apply(lambda x: x.expu / requests.loc[x.request].sum_u, axis=1)
+    edges = list()
+    for i, row in df.iterrows():
+        # edges.append((row.ride,row.request, {'prob':row.prob}))
+        edges.append((row.ride, row.request))
+    # edges
+    G.add_edges_from(edges)
+    if plot:
+        color_map = list()
+        for node in G:
+            if node < shift:
+                color_map.append('grey')
+            else:
+                color_map.append('peru')
+        pos = nx.spring_layout(G)
+        # Drawing the graph
+        nx.draw_networkx_nodes(G, pos, with_labels=False, node_size=node_size, font_size=7, node_color=color_map,
+                               label='Travellers', ax=ax)
+        nx.draw_networkx_edges(G, pos, with_labels=False, width=.3, label='Shareability', ax=ax)
+        if figname is not None:
+            plt.savefig(figname)
+    return G
+
+
 
 
