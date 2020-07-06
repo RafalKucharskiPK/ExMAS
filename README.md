@@ -39,7 +39,9 @@ If you find this code useful in your research, please consider citing:
 
 `pip install ExMAS`
 
-or clone this repository
+clone this repository for latest version
+
+or use one of [releases](https://github.com/RafalKucharskiPK/ExMAS/archive/0.9.9.tar.gz) for stable versions
 
 ----
 Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
