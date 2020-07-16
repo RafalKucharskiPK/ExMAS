@@ -335,7 +335,7 @@ def pipe(replication_id = None):
     inData.passengers.to_csv(
         "population_{}_init_{}_repl_{}.csv".format(inData.all_requests.shape[0],
                                                                       params.corona.initial_share,
-                                                                      time.time()))
+                                                                      replication_id))
 
 
 
