@@ -365,8 +365,8 @@ def pipe(inData, params):
         for col in ['times', 'indexes', 'u_paxes', 'indexes_orig', 'indexes_dest']:
             inData.sblts.rides[col] = inData.sblts.rides[col].apply(lambda x: json.loads(x))
         inData.passengers.platforms = inData.passengers.platforms.apply(lambda x: json.loads(x))
-        params.just_init = True
-        inData = ExMAS.main(inData, params)
+        #params.just_init = True
+        #inData = ExMAS.main(inData, params)
 
     if not params.get('prep_only',False):
         inData = evolve(inData, params, _print=False, _plot=params.plot)  # <---- MAIN
@@ -430,11 +430,17 @@ def corona_exploit(one_slice, *args):
     return 0
 
 
-def corona_run(workers = 8, replications = 10, search_space = None ):
-    if search_space is None:
+def corona_run(workers = 8, replications = 10, search_space = None, test = False):
+    if test:
         search_space = DotMap()
-        search_space.initial_share = [0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2]
-        search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
+        search_space.initial_share = [ 0.002]
+    else:
+
+        if search_space is None:
+            search_space = DotMap()
+            search_space.initial_share = [0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2]
+            search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
+
 
 
 
@@ -458,4 +464,4 @@ def corona_run(workers = 8, replications = 10, search_space = None ):
 
 
 if __name__ == "__main__":
-    corona_run(replications=2)
+    corona_run(replications=2, test = True)
