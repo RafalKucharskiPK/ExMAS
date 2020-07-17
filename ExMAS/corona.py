@@ -1,10 +1,14 @@
 import pandas as pd
 import random
 import ExMAS
+from ExMAS.experiments import slice_space
+import networkx as nx
 import ExMAS.utils
+import scipy
 from ExMAS.utils import inData as mData
 import json
 from dotmap import DotMap
+from ExMAS.main import init_log
 import matplotlib.pyplot as plt
 from ExMAS.utils import get_config
 from ExMAS.main import matching
@@ -12,6 +16,7 @@ import seaborn as sns
 import math
 import osmnx as ox
 import time
+
 
 def infect(inData, day, params):
     """
@@ -27,15 +32,15 @@ def infect(inData, day, params):
         travellers = inData.passengers.loc[ride.indexes]
         if travellers[travellers.state == "I"].shape[0] > 0 or travellers[~(travellers.state == "I")].shape[0] > 0:
             infected_travellers = travellers[travellers.state == "I"].index
-            noninfected_travellers = travellers[~(travellers.state == "I")].index
+            noninfected_travellers = travellers[~(travellers.state == "I") & ~(travellers.state == "R")].index
             for infected_traveller in infected_travellers:
                 for noninfected_traveller in noninfected_travellers:
-                    got_infected[noninfected_traveller] = day # did_i_infect_you(t, day, params)
+                    got_infected[noninfected_traveller] = day  # did_i_infect_you(t, day, params)
                     infected_by[noninfected_traveller] = infected_traveller
 
     inData.passengers['infection_day'].update(pd.Series(got_infected))
     inData.passengers['infected_by'].update(pd.Series(infected_by))
-    inData.passengers['state'] = inData.passengers.apply(lambda x: 'I' if x.infection_day == day else x.state, axis = 1)
+    inData.passengers['state'] = inData.passengers.apply(lambda x: 'I' if x.infection_day == day else x.state, axis=1)
 
     return inData
 
@@ -72,12 +77,12 @@ def redo_matching(inData, params, _print):
     :return:
     """
 
-    #1. Update travellers
+    # 1. Update travellers
     inData.passengers['active'] = inData.passengers.apply(
         lambda x: True if (x.active_today and x.state != 'Q') else False, axis=1)
     inData.requests = inData.all_requests.loc[inData.passengers.active == True]
 
-    #2. update rides
+    # 2. update rides
     inactives = set(inData.all_requests.loc[inData.passengers.active == False].index)
 
     inData.all_rides['active'] = inData.all_rides.apply(
@@ -89,16 +94,14 @@ def redo_matching(inData, params, _print):
 
     inData.sblts.rides = inData.all_rides[inData.all_rides.active]
     # do matching
-    print('Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
-        inData.passengers[inData.passengers.state == "Q"].shape[0],
-        inData.passengers[inData.passengers.active_today == False].shape[0],
-        inData.sblts.rides.shape[0],
-        inData.all_rides.shape[0])) if _print else None
+    inData.logger.info(
+        'Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
+            inData.passengers[inData.passengers.state == "Q"].shape[0],
+            inData.passengers[inData.passengers.active_today == False].shape[0],
+            inData.sblts.rides.shape[0],
+            inData.all_rides.shape[0]))
 
-
-
-    return matching(inData, params.shareability, _print = False, make_assertion = False)
-
+    return matching(inData, params.shareability, _print=False, make_assertion=False)
 
 
 def make_population(inData, params):
@@ -109,32 +112,29 @@ def make_population(inData, params):
     :return: inData.population DataFrame with index from inData.requests
     """
     # init population
-    def is_active_today(row):
-        if row.active:
-            if row.state == 'Q':
-                return False
-            else:
-                return random.random() < params.p
-        else:
-            return False
-
-
 
     share_of_active = params.corona.participation / params.corona.p
     inData.passengers['active'] = False  # part of the simulation
     inData.passengers['state'] = 'S'
+    inData.passengers['quarantine_day'] = None
     inData.passengers.active.loc[inData.requests.sample(int(share_of_active * params.nP)).index] = True
-    inData.passengers['active_today'] = inData.passengers.apply(lambda x: is_active_today(x), axis=1)
+    active_ones = inData.passengers[(inData.passengers.active == True)]
+    active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))
+    active_ones = active_ones[active_ones.state != 'Q']
+    inData.passengers['active_today'] = False
+    inData.passengers['active_today'].loc[active_ones.index] = True
+
     inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
-    inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0], axis=1)
+    inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
+                                                        axis=1)
     inData.sblts.requests['platform'] = inData.requests['platform']
 
-    #inData.population = pd.DataFrame(index=inData.requests.index)
-    #inData.population['state'] = 'S'  # everyone susapectible
+    # inData.population = pd.DataFrame(index=inData.requests.index)
+    # inData.population['state'] = 'S'  # everyone susapectible
     # first share infected
     if params.corona.one:
         # if we want to trace a single infector
-        infector = inData.requests[inData.requests.kind>1].sample(1).index[0]
+        infector = inData.requests[inData.requests.kind > 1].sample(1).index[0]
         inData.passengers['state'] = inData.passengers.apply(
             lambda x: 'I' if x.name == infector else 'S', axis=1)
     else:
@@ -147,7 +147,7 @@ def make_population(inData, params):
     return inData
 
 
-def evolve(inData, params, _print = False, _plot = False):
+def evolve(inData, params, _print=False, _plot=False):
     """
     starts with initial share of infected population and gradually infects co-riders
     :param inData:
@@ -156,34 +156,55 @@ def evolve(inData, params, _print = False, _plot = False):
     :param _plot:
     :return:
     """
+
+    def recovery(x):
+        if x.quarantine_day == None:
+            return x.state
+        else:
+            if x.quarantine_day + params.corona.recovery == day:
+                return 'R'  # back
+            else:
+                return x.state
+
     def is_active_today(row):
         if row.active:
             if row.state == 'Q':
                 return False
             else:
-                return random.random() < params.p
+                return random.random() < params.corona.p
         else:
             return False
 
-    #initialise
+    # initialise
     day = 0
     ret = dict()
-    inData.all_requests = inData.requests.copy()  # keep for reference for later updates
+    # inData.all_requests = inData.requests.copy()  # keep for reference for later updates
     inData.all_rides = inData.sblts.rides.copy()
     inData = make_population(inData, params)
 
     ret[day] = inData.passengers.groupby('state').size()
-    print(ret[day]) if _print else None
 
     while "I" in ret[day].index:
         day += 1
-        print('day {}'.format(day))
+        inData.logger.info('day {}'.format(day))
         # quarantine
         inData.passengers['newly_quarantined'] = inData.passengers.apply(
             lambda r: False if r.infection_day is None else day - r.infection_day == params.corona.time_to_quarantine,
-            axis=1) # are there newly quarantined travellers?
+            axis=1)  # are there newly quarantined travellers?
+        inData.passengers.quarantine_day = inData.passengers.apply(
+            lambda x: day if x.newly_quarantined else x.quarantine_day, axis=1)
+        inData.passengers.state = inData.passengers.apply(
+            lambda x: recovery(x), axis=1)
+        inData.logger.info('recovered {}'.format(
+            inData.passengers[inData.passengers.quarantine_day == day - params.corona.recovery].shape[0]))
+
         if params.corona.participation_prob < 1:
-            inData.passengers['active_today'] = inData.passengers.apply(lambda x: is_active_today(x), axis=1)
+            active_ones = inData.passengers[(inData.passengers.active == True)]
+            active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))
+            active_ones = active_ones[active_ones.state != 'Q']
+            inData.passengers['active_today'] = False
+            inData.passengers['active_today'].loc[active_ones.index] = True
+
             inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
             inData.requests['platform'] = inData.requests.apply(
                 lambda row: inData.passengers.loc[row.name].platforms[0], axis=1)
@@ -193,25 +214,40 @@ def evolve(inData, params, _print = False, _plot = False):
         inData.passengers.state = inData.passengers.apply(lambda r: 'Q' if r.newly_quarantined else r.state, axis=1)
 
         # remove quarantined requests
-        inData = matching(inData, params, _print) # if so, redo matching
-        print('Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
-            inData.passengers[inData.passengers.state == "Q"].shape[0],
-            inData.passengers[inData.passengers.active_today == False].shape[0],
-            inData.sblts.rides.shape[0],
-            inData.all_rides.shape[0]))
+        inData = matching(inData, params, _print)  # if so, redo matching
+        inData.logger.info('Day: {}\t, quarantined: {}\t active today: {}.'.format(day,
+                                                                                   inData.passengers[
+                                                                                       inData.passengers.state == "Q"].shape[
+                                                                                       0],
+                                                                                   inData.passengers[
+                                                                                       inData.passengers.active_today == True].shape[
+                                                                                       0]))
         # infection
         inData = infect(inData, day, params)
         ret[day] = inData.passengers.groupby('state').size()
-        print(ret[day]) if _print else None
+        inData.logger.info(ret[day])
 
     inData.report = pd.DataFrame(ret)
 
     if _plot:
         plot_spread(inData)
 
+    if params.get('report', False):
+        replication_id = random.randint(0, 100000)
+        ret = inData.report.T.fillna(0)
+        filename = "nP-{}_init-{}_p-{}_quarantine-{}_recovery-{}_repl-{}.csv".format(
+            params.nP * params.corona.participation,
+            params.corona.initial_share,
+            params.corona.p,
+            params.corona.time_to_quarantine,
+            params.corona.recovery, replication_id)
+        ret.to_csv("ExMAS/data/corona/corona_" + filename)
+        inData.passengers.to_csv("ExMAS/data/corona/population_" + filename)
+
     return inData
 
-def plot_spread(inData, MODE = 'paths'):
+
+def plot_spread(inData, MODE='paths'):
     """
     plots results of spreading on three plots
     1. travellers in respective states (S -> I -> Q ) over days
@@ -233,7 +269,6 @@ def plot_spread(inData, MODE = 'paths'):
     axes[0].set_ylim([0, df.Q.max() * 1.2])
 
     (df.Q + df.I).diff(1).shift(-1).plot(kind='bar', color=colors[0], ax=axes[1])
-
 
     axes[0].set_title('Spreading')
     axes[0].set_xlabel('day')
@@ -257,85 +292,86 @@ def plot_spread(inData, MODE = 'paths'):
     inf_map['all_infected'] = pd.Series(rets)
     inf_map['n_infected'] = pd.Series(lens)
     inf_map['degree'] = pd.Series(degs)
-    inf_map.n_infected.hist(ax = axes[2])
+    inf_map.n_infected.hist(ax=axes[2])
 
     inf_map.degree.hist(ax=axes[3])
 
     plt.show()
     if 'G' in inData.keys():
-        fig, ax = ox.plot_graph(inData.G, figsize = (16, 16), node_size=0, edge_linewidth=0.1,
+        fig, ax = ox.plot_graph(inData.G, figsize=(16, 16), node_size=0, edge_linewidth=0.1,
                                 show=False, close=False,
                                 edge_color='white')
 
-        inData.all_requests['ox'] = inData.all_requests.apply(lambda r: inData.nodes.loc[r.origin].x, axis=1)
-        inData.all_requests['oy'] = inData.all_requests.apply(lambda r: inData.nodes.loc[r.origin].y, axis=1)
-        inData.all_requests['dx'] = inData.all_requests.apply(lambda r: inData.nodes.loc[r.destination].x, axis=1)
-        inData.all_requests['dy'] = inData.all_requests.apply(lambda r: inData.nodes.loc[r.destination].y, axis=1)
+        inData.passengers['ox'] = inData.requests.apply(lambda r: inData.nodes.loc[r.origin].x, axis=1)
+        inData.passengers['oy'] = inData.requests.apply(lambda r: inData.nodes.loc[r.origin].y, axis=1)
+        inData.passengers['dx'] = inData.requests.apply(lambda r: inData.nodes.loc[r.destination].x, axis=1)
+        inData.passengers['dy'] = inData.requests.apply(lambda r: inData.nodes.loc[r.destination].y, axis=1)
 
         for i, pop in inData.passengers.dropna().iterrows():
-            req = inData.all_requests.loc[pop.name]
+            req = inData.passengers.loc[pop.name]
             if MODE == 'paths':
                 if pop.infection_day <= 0:
                     ax.plot([req.ox, req.dx], [req.oy, req.dy], color='red', alpha=1, lw=5)
                 else:
                     ax.plot([req.ox, req.dx], [req.oy, req.dy], color='orange',
-                            alpha=math.exp(1 / pop.infection_day) - 1, lw=5-pop.infection_day/6)
+                            alpha=math.exp(1 / pop.infection_day) - 1, lw=5 - pop.infection_day / 6)
             elif MODE == "o":
                 if pop.infection_day <= 0:
-                    ax.scatter(req.ox, req.oy, c = 'red', s=20, alpha = 1)
+                    ax.scatter(req.ox, req.oy, c='red', s=20, alpha=1)
                 else:
-                    ax.scatter(req.ox, req.oy, c = 'orange', s=20-pop.infection_day,
-                               alpha = min(1,math.exp(1 / pop.infection_day) - 1))
+                    ax.scatter(req.ox, req.oy, c='orange', s=20 - pop.infection_day,
+                               alpha=min(1, math.exp(1 / pop.infection_day) - 1))
             elif MODE == "d":
                 if pop.infection_day <= 0:
-                    ax.scatter(req.ox, req.oy, c = 'red', s=20, alpha = 1)
+                    ax.scatter(req.ox, req.oy, c='red', s=20, alpha=1)
                 else:
-                    ax.scatter(req.ox, req.oy, c = 'orange', s=20-pop.infection_day,
-                               alpha = min(1,math.exp(1 / pop.infection_day) - 1))
+                    ax.scatter(req.ox, req.oy, c='orange', s=20 - pop.infection_day,
+                               alpha=min(1, math.exp(1 / pop.infection_day) - 1))
 
         plt.show()
 
 
-
-def pipe(replication_id = None):
+def pipe(inData, params):
     """ full pipeline for corona study
     reads the data and params
     runs experiments
     saves data into csvs
     """
-    from ExMAS.utils import inData as inData
 
-    params = get_config('ExMAS/data/configs/corona.json')
-    params.nP = 200
-    params = ExMAS.utils.make_paths(params)
+    if not params.get('use_prep',False):
+        params.t0 = pd.Timestamp.now()
+        inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the CITY graph
 
-    params.t0 = pd.Timestamp.now()
+        inData = ExMAS.utils.generate_demand(inData, params)
+
+        inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0], axis=1)
+        inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
+                                                            axis=1)
+        inData.sblts.requests['platform'] = inData.requests['platform']
+
+        inData = ExMAS.main(inData, params)
+
+        if params.get('prep_only',False):
+            inData.requests.to_csv('ExMAS/data/corona/requests.csv')
+            inData.sblts.requests.to_csv('ExMAS/data/corona/sblt_requests.csv')
+            inData.sblts.rides.to_csv('ExMAS/data/corona/rides.csv')
+            inData.passengers.to_csv('ExMAS/data/corona/passengers.csv')
+    else:
+
+        inData.requests = pd.read_csv('ExMAS/data/corona/requests.csv')
+        inData.sblts.requests = pd.read_csv('ExMAS/data/corona/sblt_requests.csv')
+        inData.sblts.rides = pd.read_csv('ExMAS/data/corona/rides.csv')
+        inData.passengers = pd.read_csv('ExMAS/data/corona/passengers.csv')
+        for col in ['times', 'indexes', 'u_paxes', 'indexes_orig', 'indexes_dest']:
+            inData.sblts.rides[col] = inData.sblts.rides[col].apply(lambda x: json.loads(x))
+        inData.passengers.platforms = inData.passengers.platforms.apply(lambda x: json.loads(x))
+        params.just_init = True
+        inData = ExMAS.main(inData, params)
+
+    if not params.get('prep_only',False):
+        inData = evolve(inData, params, _print=False, _plot=params.plot)  # <---- MAIN
 
 
-
-    inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the CITY graph
-
-    inData = ExMAS.utils.generate_demand(inData, params)
-
-    inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0], axis=1)
-    inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
-                                                        axis=1)
-    inData.sblts.requests['platform'] = inData.requests['platform']
-    params.without_matching = True
-
-    inData = ExMAS.main(inData, params)
-
-
-    inData = evolve(inData, params, _print=False, _plot = False)  # <---- MAIN
-
-    ret = inData.report.T.fillna(0)
-    ret.to_csv("corona_{}_init{}_repl{}.csv".format(inData.all_requests.shape[0],
-                                                    params.corona.initial_share,
-                                                    replication_id))
-    inData.passengers.to_csv(
-        "population_{}_init_{}_repl_{}.csv".format(inData.all_requests.shape[0],
-                                                                      params.corona.initial_share,
-                                                                      replication_id))
 
 
 
@@ -349,7 +385,7 @@ def did_i_infect_you(time, day, params):
         return False
 
 
-def time_together(ride, i, j, _print = False):
+def time_together(ride, i, j, _print=False):
     """
     determine time that two travellers spent together on a ride
     :param ride:
@@ -360,9 +396,9 @@ def time_together(ride, i, j, _print = False):
     """
     degree = len(ride.indexes)
     times = pd.Series(ride.times).cumsum()
-    window_i = [times[ride.indexes_orig.index(i)], times[degree+ride.indexes_dest.index(i)]]
-    window_j = [times[ride.indexes_orig.index(j)], times[degree+ride.indexes_dest.index(j)]]
-    overlap = min(window_j[1],window_i[1])- max(window_i[0],window_i[0])
+    window_i = [times[ride.indexes_orig.index(i)], times[degree + ride.indexes_dest.index(i)]]
+    window_j = [times[ride.indexes_orig.index(j)], times[degree + ride.indexes_dest.index(j)]]
+    overlap = min(window_j[1], window_i[1]) - max(window_i[0], window_i[0])
     if _print:
         print(ride)
         print(i, j)
@@ -372,14 +408,54 @@ def time_together(ride, i, j, _print = False):
 
 
 
+def corona_exploit(one_slice, *args):
+
+    # function to be used with optimize brute
+    inData, params, search_space = args  # read static input
+    _inData = inData.copy()
+    _params = params.copy()
+    stamp = dict()
+    stamp['repl'] = time.time()
+    # parameterize
+    for i, key in enumerate(search_space.keys()):
+        val = search_space[key][int(one_slice[int(i)])]
+        stamp[key] = val
+        print(key, val)
+        if key == 'nP':
+            _params.nP = val
+        else:
+            _params.corona[key] = val
+    _inData = pipe(_inData,  _params)
+
+    return 0
+
+
+def corona_run(workers = 8, replications = 10, search_space = None ):
+    if search_space is None:
+        search_space = DotMap()
+        search_space.initial_share = [0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2]
+        search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
+
+
+
+
+    from ExMAS.utils import inData as inData
+    params = get_config('ExMAS/data/configs/corona.json')
+    params = ExMAS.utils.make_paths(params)
+    params.prep_only = True
+    pipe(inData, params)
+    params.prep_only = False
+    params.use_prep = True
+
+
+
+    scipy.optimize.brute(func=corona_exploit,
+                             ranges=slice_space(search_space, replications = replications),
+                             args=(inData, params, search_space),
+                             full_output=True,
+                             finish=None,
+                             workers=workers)
+
 
 if __name__ == "__main__":
-    pipe()
-
-
-
-
-
-
-
-
+    corona_run(replications=2)

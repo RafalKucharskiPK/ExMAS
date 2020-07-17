@@ -1,0 +1,4 @@
+
+*.pyc
+ExMAS/data/corona/corona_nP-160.0_init-0.025_p-0.8_quarantine-6_recovery-7_repl-51263.csv
+*.csv
