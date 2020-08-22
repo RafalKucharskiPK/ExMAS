@@ -329,6 +329,165 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     return _inData
 
 
+def synthetic_demand_poly_II(_inData, _params=None):
+    from scipy.stats import gamma as gamma_random
+    from random import seed
+    origins_albatross = pd.read_csv('ExMAS/data/albatross/AM_origins.csv', index_col=0)
+    origins_albatross = origins_albatross[
+    origins_albatross['origin'].isin(_inData.skim.index)]  # droping those origins not in skim
+
+
+
+    # 1. create a passenger DataFrame
+
+    df = pd.DataFrame(index=np.arange(1, _params.nP + 1), columns=_inData.passengers.columns)
+    df.status = 0
+
+    # initialize with a completely random nodes (no distribution)
+    df.pos = df.apply(lambda x: rand_node(_inData.nodes), axis=1)
+    _inData.passengers = df
+
+    # 1. create a Centers and potential destinations
+    Centers = []
+    Dist = []
+
+    rdist = gamma_random(a=_params.gammdist.shape, scale=_params.gammdist.scale)
+
+    for i in range(_params.nCenters):
+        Centers.append(rand_node(_inData.nodes))
+
+        # 2. distances and probabiltiies for each node #get distances from centre for each node
+        _distances = _inData.skim[Centers[i]].to_frame().dropna()  # compute distances from center
+        _distances.columns = ['distance']
+        _distances = _distances[
+            _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
+
+        while (sum(_distances['distance']) == 0):
+            Centers[i] = rand_node(_inData.nodes)
+            _distances = _inData.skim[Centers[i]].to_frame().dropna()  # compute distances from center
+            _distances.columns = ['distance']
+            _distances = _distances[
+                _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
+
+        # apply distributions to obtain probability of destination
+
+        _distances['p_destination'] = _distances['distance'].apply(lambda x: rdist.pdf(x))
+
+        Dist.append(_distances)
+
+    randomdestinations = []
+
+    # we can generate more potential destinations if desired
+    for i in range(_params.nP):
+        for j in range(_params.nCenters):
+            randomdestinations.append(Dist[j].sample(1, weights='p_destination', replace=True).index.values[0])
+
+            # 3. create requests DataFrame
+    requests = pd.DataFrame(index=df.index, columns=_inData.requests.columns)
+
+    # 3.a. draw random departure time
+
+    # apply uniform distribution on request times
+    treq = np.random.uniform(-_params.simTime * 60 * 60 / 2, _params.simTime * 60 * 60 / 2, _params.nP)
+
+    requests.treq = [_params.t0 + pd.Timedelta(int(_), 's') for _ in treq]
+
+    # 3.b. draw origin sampling albatross origins
+    requests.origin = origins_albatross.sample(_params.nP).values
+
+    # 3.c. draw destination with a probability
+    # seed fixed or not?
+    seed(1)
+
+    destination = []
+    dist = []
+
+    rdist = gamma_random(a=_params.gamma_imp.shape, scale=_params.gamma_imp.scale)
+
+    for i in range(_params.nP):
+        _distances = _inData.skim[requests.origin[i + 1]].to_frame().dropna()  # compute distances from center
+        _distances.columns = ['distance']
+        _distances = _distances[
+            _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
+
+        while (sum(_distances['distance']) == 0):
+            requests.origin[i + 1] = origins_albatross['origin'].sample(1, replace=True).values[0]
+            _distances = _inData.skim[requests.origin[i + 1]].to_frame().dropna()  # compute distances from center
+            _distances.columns = ['distance']
+            _distances = _distances[
+                _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
+            _distances = _distances[_distances.index.isin(randomdestinations)]
+
+        # apply distributions to obtain probability of destination
+
+        _distances['p_destination'] = _distances['distance'].apply(lambda x: rdist.pdf(x))
+        samp_destination = _distances.sample(1, weights='p_destination', replace=True)
+        destination.append(samp_destination.index.values[0])
+        dist.append(samp_destination['distance'].values[0])
+
+    requests['destination'] = destination
+    requests['dist'] = dist
+
+    # 4 make travel times (without using speed, speed param is used inside cal_sblt)
+    requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
+
+    requests['tarr'] = [request.treq + request.ttrav for _, request in requests.iterrows()]
+    requests = requests.sort_values('treq')
+    requests['pax_id'] = requests.index.copy()
+
+    # output
+    _inData['requests'] = requests
+    _inData['passengers'].pos = _inData.requests.origin
+    _inData['probs'] = dist
+    _inData['centers'] = Centers
+
+    DistbtwnCenters = []
+    for i in range(0, _params.nCenters - 1):
+        for j in range(i + 1, _params.nCenters):
+            DistbtwnCenters.append(_inData.skim.loc[Centers[i], Centers[j]])
+
+    _inData.DistbtwnCenters_mean = np.mean(DistbtwnCenters)
+    _inData.DistbtwnCenters_std = np.std(DistbtwnCenters)
+
+    return _inData
+
+
+def plot_demand_poly(inData, _params, t0=None, vehicles=False, s=10):
+    plt.rcParams['figure.figsize'] = [12, 4]
+    if t0 is None:
+        t0 = inData.requests.treq.mean()
+
+    # plot osmnx graph, its center, scattered nodes of requests origins and destinations
+    # plots requests temporal distribution
+    fig, ax = plt.subplots(1, 3)
+    ((t0 - inData.requests.treq) / np.timedelta64(1, 'h')).plot.kde(title='Temporal distribution', ax=ax[0])
+    (inData.requests.ttrav / np.timedelta64(1, 'm')).plot(kind='hist', title='Trips travel times [min]', ax=ax[1])
+    inData.requests.dist.plot(kind='hist', title='Trips distance [m]', ax=ax[2])
+    # (inData.requests.ttrav / np.timedelta64(1, 'm')).describe().to_frame().T
+    plt.tight_layout()
+    plt.show()
+    fig, ax = ox.plot_graph(inData.G, node_size=0, edge_linewidth=0.5,
+                            show=False, close=False,
+                            edge_color='black', bgcolor = 'white')
+    for _, r in inData.requests.iterrows():
+        ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=s, marker='D')
+        ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=s)
+    if vehicles:
+        for _, r in inData.vehicles.iterrows():
+            ax.scatter(inData.G.nodes[r.pos]['x'], inData.G.nodes[r.pos]['y'], c='blue', s=s, marker='x')
+    ax.scatter(inData.G.nodes[inData.stats['center']]['x'], inData.G.nodes[inData.stats['center']]['y'], c='red',
+               s=50 * s, marker='x')
+
+    for i in range(_params.nCenters):
+        ax.scatter(inData.G.nodes[inData.centers[i]]['x'], inData.G.nodes[inData.centers[i]]['y'], c='blue', s=50 * s,
+                   marker='x')
+
+    plt.tight_layout()
+    plt.title(
+        'Demand in {} with origins marked in green, destinations in orange and vehicles in blue'.format(_params.city))
+    plt.show()
+
+
 def mode_choices(_inData, sp):
     """
     Compete with Transit.

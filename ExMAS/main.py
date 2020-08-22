@@ -342,22 +342,22 @@ def pairs(_inData, params, process=True, check=True, plot=False):
                                                weight='length') / params.avg_speed) - t.t_od) < 2
         # and on the whole dataset
         try:
-            assert (r.t_i - r.ttrav_i > -2).all()  # share time is not smaller than direct
-            assert (r.t_j - r.ttrav_j > -2).all()
+            assert (r.t_i - r.ttrav_i > -3).all()  # share time is not smaller than direct
+            assert (r.t_j - r.ttrav_j > -3).all()
             assert (abs(r.delay_i) <= r.delta_i).all()  # is the delay within bounds
             assert (abs(r.delay_j) <= r.delta_j).all()
             assert (r.u_i <= utility_ns_i() * 1.01).all()  # do we have positive sharing utility
             assert (r.u_j <= utility_ns_j() * 1.01).all()  # do we have positive sharing utility
         except:
             _inData.logger.critical('FIFO pairs assertion failed')
-            _inData.logger.warning(r[~(r.t_i - r.ttrav_i > -2)])  # share time is not smaller than direct
-            _inData.logger.warning(r[~(r.t_j - r.ttrav_j > -2)])
+            _inData.logger.warning(r[~(r.t_i - r.ttrav_i > -3)])  # share time is not smaller than direct
+            _inData.logger.warning(r[~(r.t_j - r.ttrav_j > -3)])
             _inData.logger.warning(r[~(abs(r.delay_i) <= r.delta_i)])  # is the delay within bounds
             _inData.logger.warning(r[~(abs(r.delay_j) <= r.delta_j)])
             _inData.logger.warning(r[~(r.u_i <= utility_ns_i() * 1.01)])  # do we have positive sharing utility
             _inData.logger.warning(r[~(r.u_j <= utility_ns_j() * 1.01)])  # do we have positive sharing utility
-            assert (r.t_i - r.ttrav_i > -2).all()  # share time is not smaller than direct
-            assert (r.t_j - r.ttrav_j > -2).all()
+            assert (r.t_i - r.ttrav_i > -3).all()  # share time is not smaller than direct
+            assert (r.t_j - r.ttrav_j > -3).all()
             assert (abs(r.delay_i) <= r.delta_i).all()  # is the delay within bounds
             assert (abs(r.delay_j) <= r.delta_j).all()
             assert (r.u_i <= utility_ns_i() * 1.01).all()  # do we have positive sharing utility
