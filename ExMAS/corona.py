@@ -29,126 +29,71 @@ def infect(inData, day, params):
     got_infected = dict()
     infected_by = dict()
     for i, ride in inData.sblts.schedule.iterrows():  # iterate over all shared rides
-        travellers = inData.passengers.loc[ride.indexes]
-        if travellers[travellers.state == "I"].shape[0] > 0:
-            infected_travellers = travellers[travellers.state == "I"].index
-            noninfected_travellers = travellers[travellers.state == "S"].index
-            for infected_traveller in infected_travellers:
-                for noninfected_traveller in noninfected_travellers:
-                    got_infected[noninfected_traveller] = day  # did_i_infect_you(t, day, params)
-                    infected_by[noninfected_traveller] = infected_traveller
+        travellers = inData.passengers.loc[ride.indexes]  # travellers of this shared ride
+        if travellers[travellers.state == "I"].shape[0] > 0:  # is anyone infected
+            infected_travellers = travellers[travellers.state == "I"].index  # infected ones
+            noninfected_travellers = travellers[travellers.state == "S"].index   # susceptible ones
+            for infected_traveller in infected_travellers: # let's infect: all infected
+                for noninfected_traveller in noninfected_travellers:  # infect susceptible
+                    got_infected[noninfected_traveller] = day  # output: when you got infected
+                    infected_by[noninfected_traveller] = infected_traveller  # output: by whom
 
-    inData.passengers['infection_day'].update(pd.Series(got_infected))
-    inData.passengers['infected_by'].update(pd.Series(infected_by))
+    inData.passengers['infection_day'].update(pd.Series(got_infected))  # update infection days for those infected
+    inData.passengers['infected_by'].update(pd.Series(infected_by))  # update by whom infected
+    # change state of those infected today
     inData.passengers['state'] = inData.passengers.apply(lambda x: 'I' if x.infection_day == day else x.state, axis=1)
 
+
     return inData
-
-
-def infection_map(inData):
-    """
-    traces infections from initial ones
-    :param inData:
-    :return: dictionary infection_map[intial_infector][level][list of travellers infected at this step]
-    """
-    infection_map = dict()
-
-    initial_infectors = inData.passengers[inData.passengers.infection_day < 0].index
-
-    for i in initial_infectors:
-        infection_map[i] = dict()
-        level = 1
-        infection_map[i][level] = list(inData.passengers[inData.passengers.infected_by == i].index)
-        while len(infection_map[i][level]) > 0:
-            level += 1
-            infection_map[i][level] = list(
-                inData.passengers[inData.passengers.infected_by.isin(infection_map[i][level - 1])].index)
-    return infection_map
-
-
-def redo_matching(inData, params, _print):
-    """
-    updates which travellers are still active (not quarantined),
-    removes rides composed with travellers who are quarantines (at least one)
-    rematches travellers who are still active
-    :param inData:
-    :param params:
-    :param _print:
-    :return:
-    """
-
-    # 1. Update travellers
-    inData.passengers['active'] = inData.passengers.apply(
-        lambda x: True if (x.active_today and x.state != 'Q') else False, axis=1)
-    inData.requests = inData.all_requests.loc[inData.passengers.active == True]
-
-    # 2. update rides
-    inactives = set(inData.all_requests.loc[inData.passengers.active == False].index)
-
-    inData.all_rides['active'] = inData.all_rides.apply(
-        lambda ride: True if len(list(set(ride.indexes) & inactives)) == 0 else False, axis=1)
-
-    # inData.all_rides['active'] = inData.all_rides.apply(lambda ride: True if
-    # inData.population.loc[ride.indexes][(inData.population.loc[ride.indexes].active == False)].shape[0] == 0 else False,
-    #                                                     axis=1)
-
-    inData.sblts.rides = inData.all_rides[inData.all_rides.active]
-    # do matching
-    inData.logger.info(
-        'Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
-            inData.passengers[inData.passengers.state == "Q"].shape[0],
-            inData.passengers[inData.passengers.active_today == False].shape[0],
-            inData.sblts.rides.shape[0],
-            inData.all_rides.shape[0]))
-
-    return matching(inData, params.shareability, _print=False, make_assertion=False)
 
 
 def make_population(inData, params):
     """
     generates initial population of _S_uspectible travellers and initial_share if _I_nfected given days prior
+    it determines from total population, who will take part in pool used in D2D simulations (active)
+    and determines who is active on first day (active_today)
     :param params: params.corona.initial_share, params.corona.infected_prior
     :param inData
     :return: inData.population DataFrame with index from inData.requests
     """
     # init population
-
-    share_of_active = params.corona.participation / params.corona.p
-    inData.passengers['active'] = False  # part of the simulation
+    inData.passengers['active'] = False
     inData.passengers['state'] = 'S'
     inData.passengers['quarantine_day'] = None
-    inData.passengers.active.loc[inData.requests.sample(int(share_of_active * params.nP)).index] = True
-    active_ones = inData.passengers[(inData.passengers.active == True)]
-    active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))
-    active_ones = active_ones[active_ones.state != 'Q']
-    inData.passengers['active_today'] = False
-    inData.passengers['active_today'].loc[active_ones.index] = True
+    inData.passengers['infected_by'] = None
 
+    # active D2D
+    share_of_active = params.corona.participation / params.corona.p  # determine pool of travellers to draw everyday
+    inData.passengers.active.loc[inData.requests.sample(int(share_of_active *
+                                                            params.nP)).index] = True  # those will play in D2D simulations
+
+    # active today
+    active_ones = inData.passengers[(inData.passengers.active == True)]
+    active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))  # those are active today
+    active_ones = active_ones[active_ones.state != 'Q']  # except those quarantined
+    inData.passengers['active_today'] = False
+    inData.passengers['active_today'].loc[active_ones.index] = True  # those will be matched and then may be infected
+
+    # if platform is [-1] passenger is not matched
     inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
     inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
                                                         axis=1)
     inData.sblts.requests['platform'] = inData.requests['platform']
 
-    # inData.population = pd.DataFrame(index=inData.requests.index)
-    # inData.population['state'] = 'S'  # everyone susapectible
-    # first share infected
-    if params.corona.one:
-        # if we want to trace a single infector
-        infector = inData.requests[inData.requests.kind > 1].sample(1).index[0]
-        inData.passengers['state'] = inData.passengers.apply(
-            lambda x: 'I' if x.name == infector else 'S', axis=1)
-    else:
-        # if we trace share of initially infected
-        inData.passengers['state'] = inData.passengers.apply(
+    # infect randomly initial_share of travellers
+    inData.passengers['state'] = inData.passengers.apply(
             lambda x: 'S' if random.random() > params.corona.initial_share else 'I', axis=1)
+    # but only those active
+    inData.passengers['state'] = inData.passengers.apply(lambda x: 'S' if not x.active else x.state, axis=1)
     inData.passengers['infection_day'] = inData.passengers.apply(
         lambda r: 0 if r.state == "I" else None, axis=1)
-    inData.passengers['infected_by'] = None
+
     return inData
 
 
 def evolve(inData, params, _print=False, _plot=False):
     """
+    Day to Day evolution of virus spreading from initial population
     starts with initial share of infected population and gradually infects co-riders
     :param inData:
     :param params:
@@ -158,6 +103,7 @@ def evolve(inData, params, _print=False, _plot=False):
     """
 
     def recovery(x):
+        # did I recover today (after quarantine)
         if x.quarantine_day == None:
             return x.state
         else:
@@ -166,79 +112,76 @@ def evolve(inData, params, _print=False, _plot=False):
             else:
                 return x.state
 
-    def is_active_today(row):
-        if row.active:
-            if row.state == 'Q':
-                return False
-            else:
-                return random.random() < params.corona.p
-        else:
-            return False
-
     # initialise
     day = 0
-    ret = dict()
-    # inData.all_requests = inData.requests.copy()  # keep for reference for later updates
-    # inData.all_rides = inData.sblts.rides.copy()p
-    inData = make_population(inData, params)
+    ret = dict() # report - trace number of passengers in each state
+    inData = make_population(inData, params)  # determine who is active (pool to draw everyday) who is active today
+    # and initially infected
     ret[day] = inData.passengers.groupby('state').size()
 
-    while "I" in ret[day].index:
-        day += 1
+    while "I" in ret[day].index: # main D2D loop, until there are still infected (we do not care about Quarantined)
+        day += 1 # incerement
         inData.logger.info('day {}'.format(day))
-        # quarantine
 
+        # quarantines
         inData.passengers['newly_quarantined'] = inData.passengers.apply(
             lambda r: False if r.infection_day is None else day - r.infection_day == params.corona.time_to_quarantine,
             axis=1)  # are there newly quarantined travellers?
         inData.passengers.quarantine_day = inData.passengers.apply(
             lambda x: day if x.newly_quarantined else x.quarantine_day, axis=1)
-        inData.passengers.state = inData.passengers.apply(
-            lambda x: recovery(x), axis=1)
-        inData.logger.info('recovered {}'.format(
-            inData.passengers[inData.passengers.quarantine_day == day - params.corona.recovery].shape[0]))
-
-        active_ones = inData.passengers[(inData.passengers.active == True)]
-        active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))
-        active_ones = active_ones[active_ones.state != 'Q']
-        inData.passengers['active_today'] = False
-        inData.passengers['active_today'].loc[active_ones.index] = True
-
-        inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
-
-        inData.requests['platform'] = inData.requests.apply(
-            lambda row: inData.passengers.loc[row.name].platforms[0], axis=1)
-        inData.sblts.requests['platform'] = inData.requests['platform']
-
         inData.passengers.state = inData.passengers.apply(lambda r: 'Q' if r.newly_quarantined else r.state, axis=1)
 
-        # remove quarantined requests
-        inData = matching(inData, params, _print)  # if so, redo matching
-        # inData.logger.warn('Day: {}\t infected: {}\t quarantined: '
-        #                    '{}\t recovered: {} \t active today: {}.'.format(day,
-        #                                                                     inData.passengers[
-        #                                                                         inData.passengers.state == "I"].shape[
-        #                                                                         0],
-        #                                                                     inData.passengers[
-        #                                                                         inData.passengers.state == "Q"].shape[
-        #                                                                         0],
-        #                                                                     inData.passengers[
-        #                                                                         inData.passengers.state == "R"].shape[
-        #                                                                         0],
-        #                                                                     inData.passengers[
-        #                                                                         inData.passengers.active_today == True].shape[
-        #                                                                         0]))
-        # infection
+        # recoveries
+        inData.passengers.state = inData.passengers.apply(
+            lambda x: recovery(x), axis=1)
+
+        # active today
+        active_ones = inData.passengers[(inData.passengers.active == True)]
+        active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))  # those are active today
+        active_ones = active_ones[active_ones.state != 'Q']  # except those quarantined
+        inData.passengers['active_today'] = False
+        inData.passengers['active_today'].loc[
+            active_ones.index] = True  # those will be matched and then may be infected
+
+        # if platform is [-1] passenger is not matched
+        inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
+        inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
+                                                            axis=1)
+        inData.sblts.requests['platform'] = inData.requests['platform']
+
+        # redo matching
+        inData = matching(inData, params, _print)
+
+        # and infect
         inData = infect(inData, day, params)
         ret[day] = inData.passengers.groupby('state').size()
         inData.logger.info(ret[day])
+        inData.logger.info('Day: {}\t infected: {}\t quarantined: '
+                           '{}\t recovered: {} \t susceptible: {}, active today: {}.'.format(day,
+                                                                            inData.passengers[
+                                                                                inData.passengers.state == "I"].shape[
+                                                                                0],
+                                                                            inData.passengers[
+                                                                                inData.passengers.state == "Q"].shape[
+                                                                                0],
+                                                                            inData.passengers[
+                                                                                inData.passengers.state == "R"].shape[
+                                                                                0],
+                                                                            inData.passengers[
+                                                                                inData.passengers.state == "S"].shape[
+                                                                                0],
+                                                                            inData.passengers[
+                                                                                inData.passengers.active_today == True].shape[
+                                                                                0]))
+        # go to next day (if still anyone is infected)
 
+    # end of the loop
     inData.report = pd.DataFrame(ret)
 
     if _plot:
         plot_spread(inData)
 
-    if params.get('report', False):
+    if params.get('report', False): # store results to csvs
         replication_id = random.randint(0, 100000)
         ret = inData.report.T.fillna(0)
         filename = "nP-{}_init-{}_p-{}_quarantine-{}_recovery-{}_repl-{}.csv".format(
@@ -247,11 +190,74 @@ def evolve(inData, params, _print=False, _plot=False):
             params.corona.p,
             params.corona.time_to_quarantine,
             params.corona.recovery, replication_id)
-        ret.to_csv("ExMAS/data/corona/corona_" + filename)
-        inData.passengers.to_csv("ExMAS/data/corona/population_" + filename)
+        ret.to_csv("ExMAS/data/corona/corona_" + filename)  # day to day evolution of travellers in each state
+        inData.passengers.to_csv("ExMAS/data/corona/population_" + filename)  # pax info (when infected and by whom)
 
     return inData
 
+
+def pipe(inData, params):
+    """ full pipeline for corona study
+    reads the data and params
+    runs experiments
+    saves data into csvs
+    """
+
+    if not params.get('use_prep', False):
+        # start from scratch with ExMAS
+        params.t0 = pd.Timestamp.now()
+        inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the CITY graph
+
+        inData = ExMAS.utils.generate_demand(inData, params)  # generate demand
+
+        inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0], axis=1)
+        inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
+                                                            axis=1)
+        inData.sblts.requests['platform'] = inData.requests['platform']
+
+        inData = ExMAS.main(inData, params)  # do the ExMAS
+
+        if params.get('prep_only', False):
+            # store results of ExMAS
+            inData.requests.to_csv('ExMAS/data/corona/requests.csv')
+            inData.sblts.requests.to_csv('ExMAS/data/corona/sblt_requests.csv')
+            inData.sblts.rides.to_csv('ExMAS/data/corona/rides.csv')
+            inData.passengers.to_csv('ExMAS/data/corona/passengers.csv')
+    else:
+        # read input demand and matching data
+        inData.requests = pd.read_csv('ExMAS/data/corona/requests.csv')
+        inData.sblts.requests = pd.read_csv('ExMAS/data/corona/sblt_requests.csv')
+        inData.sblts.rides = pd.read_csv('ExMAS/data/corona/rides.csv')
+        inData.passengers = pd.read_csv('ExMAS/data/corona/passengers.csv')
+        for col in ['times', 'indexes', 'u_paxes', 'indexes_orig', 'indexes_dest']:
+            inData.sblts.rides[col] = inData.sblts.rides[col].apply(lambda x: json.loads(x))
+        inData.passengers.platforms = inData.passengers.platforms.apply(lambda x: json.loads(x))
+
+    if not params.get('prep_only', False):
+        inData = evolve(inData, params, _print=False, _plot=params.plot)  # <---- MAIN
+
+
+def corona_exploit(one_slice, *args):
+    # function to be used with optimize brute
+    inData, params, search_space = args  # read static input
+    _inData = inData.copy()
+    _params = params.copy()
+    stamp = dict()
+    stamp['repl'] = time.time()
+    # parameterize for this simulation
+    for i, key in enumerate(search_space.keys()):
+        val = search_space[key][int(one_slice[int(i)])]
+        stamp[key] = val
+        print(key, val)
+        if key == 'nP':
+            _params.nP = val
+        else:
+            _params.corona[key] = val
+    pipe(_inData, _params)  # MAIN
+
+    return 0
+
+# utils
 
 def plot_spread(inData, MODE='paths'):
     """
@@ -337,54 +343,33 @@ def plot_spread(inData, MODE='paths'):
         plt.show()
 
 
-def pipe(inData, params):
-    """ full pipeline for corona study
-    reads the data and params
-    runs experiments
-    saves data into csvs
-    """
-
-    if not params.get('use_prep', False):
-        params.t0 = pd.Timestamp.now()
-        inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the CITY graph
-
-        inData = ExMAS.utils.generate_demand(inData, params)
-
-        inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0], axis=1)
-        inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
-                                                            axis=1)
-        inData.sblts.requests['platform'] = inData.requests['platform']
-
-        inData = ExMAS.main(inData, params)
-
-        if params.get('prep_only', False):
-            inData.requests.to_csv('ExMAS/data/corona/requests.csv')
-            inData.sblts.requests.to_csv('ExMAS/data/corona/sblt_requests.csv')
-            inData.sblts.rides.to_csv('ExMAS/data/corona/rides.csv')
-            inData.passengers.to_csv('ExMAS/data/corona/passengers.csv')
-    else:
-        inData.requests = pd.read_csv('ExMAS/data/corona/requests.csv')
-        inData.sblts.requests = pd.read_csv('ExMAS/data/corona/sblt_requests.csv')
-        inData.sblts.rides = pd.read_csv('ExMAS/data/corona/rides.csv')
-        inData.passengers = pd.read_csv('ExMAS/data/corona/passengers.csv')
-        for col in ['times', 'indexes', 'u_paxes', 'indexes_orig', 'indexes_dest']:
-            inData.sblts.rides[col] = inData.sblts.rides[col].apply(lambda x: json.loads(x))
-        inData.passengers.platforms = inData.passengers.platforms.apply(lambda x: json.loads(x))
-        # params.just_init = True
-        # inData = ExMAS.main(inData, params)
-
-    if not params.get('prep_only', False):
-        inData = evolve(inData, params, _print=False, _plot=params.plot)  # <---- MAIN
-
-
-### deprecated
-
 def did_i_infect_you(time, day, params):
     # generic model to determine if you infected me while we travelled together for 'time' seconds
     if time > params.corona.time_threshold:
         return day
     else:
         return False
+
+
+def infection_map(inData):
+    """
+    traces infections from initial ones
+    :param inData:
+    :return: dictionary infection_map[intial_infector][level][list of travellers infected at this step]
+    """
+    infection_map = dict()
+
+    initial_infectors = inData.passengers[inData.passengers.infection_day < 0].index
+
+    for i in initial_infectors:
+        infection_map[i] = dict()
+        level = 1
+        infection_map[i][level] = list(inData.passengers[inData.passengers.infected_by == i].index)
+        while len(infection_map[i][level]) > 0:
+            level += 1
+            infection_map[i][level] = list(
+                inData.passengers[inData.passengers.infected_by.isin(infection_map[i][level - 1])].index)
+    return infection_map
 
 
 def time_together(ride, i, j, _print=False):
@@ -409,25 +394,46 @@ def time_together(ride, i, j, _print=False):
     return overlap
 
 
-def corona_exploit(one_slice, *args):
-    # function to be used with optimize brute
-    inData, params, search_space = args  # read static input
-    _inData = inData.copy()
-    _params = params.copy()
-    stamp = dict()
-    stamp['repl'] = time.time()
-    # parameterize
-    for i, key in enumerate(search_space.keys()):
-        val = search_space[key][int(one_slice[int(i)])]
-        stamp[key] = val
-        print(key, val)
-        if key == 'nP':
-            _params.nP = val
-        else:
-            _params.corona[key] = val
-    _inData = pipe(_inData, _params)
+def redo_matching(inData, params, _print):
+    # DEPRECATED
+    """
+    updates which travellers are still active (not quarantined),
+    removes rides composed with travellers who are quarantines (at least one)
+    rematches travellers who are still active
+    :param inData:
+    :param params:
+    :param _print:
+    :return:
+    """
 
-    return 0
+    # 1. Update travellers
+    inData.passengers['active'] = inData.passengers.apply(
+        lambda x: True if (x.active_today and x.state != 'Q') else False, axis=1)
+    inData.requests = inData.all_requests.loc[inData.passengers.active == True]
+
+    # 2. update rides
+    inactives = set(inData.all_requests.loc[inData.passengers.active == False].index)
+
+    inData.all_rides['active'] = inData.all_rides.apply(
+        lambda ride: True if len(list(set(ride.indexes) & inactives)) == 0 else False, axis=1)
+
+    # inData.all_rides['active'] = inData.all_rides.apply(lambda ride: True if
+    # inData.population.loc[ride.indexes][(inData.population.loc[ride.indexes].active == False)].shape[0] == 0 else False,
+    #                                                     axis=1)
+
+    inData.sblts.rides = inData.all_rides[inData.all_rides.active]
+    # do matching
+    inData.logger.info(
+        'Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
+            inData.passengers[inData.passengers.state == "Q"].shape[0],
+            inData.passengers[inData.passengers.active_today == False].shape[0],
+            inData.sblts.rides.shape[0],
+            inData.all_rides.shape[0]))
+
+    return matching(inData, params.shareability, _print=False, make_assertion=False)
+
+
+
 
 
 def corona_run(workers=8, replications=10, search_space=None, test=False, prep = True, brute = True):
