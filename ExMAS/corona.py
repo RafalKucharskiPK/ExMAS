@@ -433,7 +433,57 @@ def redo_matching(inData, params, _print):
     return matching(inData, params.shareability, _print=False, make_assertion=False)
 
 
+def active_today(inData, params):
+    active_ones = inData.passengers[(inData.passengers.active == True)]
+    active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))  # those are active today
+    active_ones = active_ones[active_ones.state != 'Q']  # except those quarantined
+    inData.passengers['active_today'] = False
+    inData.passengers['active_today'].loc[
+        active_ones.index] = True  # those will be matched and then may be infected
 
+    # if platform is [-1] passenger is not matched
+    inData.passengers['platforms'] = inData.passengers.apply(lambda x: [0] if x.active_today else [-1], axis=1)
+    inData.requests['platform'] = inData.requests.apply(lambda row: inData.passengers.loc[row.name].platforms[0],
+                                                        axis=1)
+    inData.sblts.requests['platform'] = inData.requests['platform']
+    return inData
+
+
+def degrees(replications = 10):
+    from ExMAS.utils import inData as inData
+    params = ExMAS.utils.get_config('ExMAS/spinoffs/corona.json')  # load the default
+    params.nP = 3200
+    params.corona.participation = 0.65
+
+    inData.requests = pd.read_csv('ExMAS/data/corona/results/requests.csv')
+    inData.sblts.requests = pd.read_csv('ExMAS/data/corona/results/sblt_requests.csv')
+    inData.sblts.rides = pd.read_csv('ExMAS/data/corona/results/rides.csv')
+    inData.passengers = pd.read_csv('ExMAS/data/corona/results/passengers.csv')
+    for col in ['times', 'indexes', 'u_paxes', 'indexes_orig', 'indexes_dest']:
+        inData.sblts.rides[col] = inData.sblts.rides[col].apply(lambda x: json.loads(x))
+    inData.passengers.platforms = inData.passengers.platforms.apply(lambda x: json.loads(x))
+
+    ret = list()
+    for repl in range(replications):
+        for p in [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]:
+            params.corona.p = p
+            inData = make_population(inData,params)
+            for day in range(50):
+                inData = active_today(inData, params)
+                inData.sblts.rides['platform'] = inData.sblts.rides.apply(lambda row: list(set(inData.requests.loc[row.indexes].platform.values)),
+                                                axis=1)
+
+                inData.sblts.rides['platform'] = inData.sblts.rides.platform.apply(lambda x: -2 if len(x) > 1 else x[0])
+                G_today = ExMAS.utils.make_shareability_graph(inData.sblts.requests[inData.sblts.requests.platform == 0],
+                                   inData.sblts.rides[inData.sblts.rides.platform >-2])
+                if day == 0:
+                    G = G_today
+                else:
+                    G = nx.compose(G, G_today)
+                degree = pd.Series([G.degree(n) for n in G.nodes()])
+                ret.append({'repl':repl, 'p':p,'day':day, 'mean':degree.mean(),'std':degree.std()})
+                print(ret[-1])
+    pd.DataFrame(ret).to_csv('degrees.csv')
 
 
 def corona_run(workers=8, replications=10, search_space=None, test=False, prep = True, brute = True):
@@ -471,5 +521,9 @@ def corona_run(workers=8, replications=10, search_space=None, test=False, prep =
         pipe(inData, params)
 
 
+
+
 if __name__ == "__main__":
-    corona_run(workers=1, replications=1, prep = True, test=True, brute = False)
+    degrees(replications=10)
+    #corona_run(workers=1, replications=1, prep = True, test=True, brute = False)
+

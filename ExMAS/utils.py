@@ -552,6 +552,21 @@ def plot_demand(inData, params, t0=None, vehicles=False, s=10):
     plt.show()
 
 
+def make_shareability_graph(requests, rides):
+    # nodes are travellers, linked if the share
+    G = nx.Graph()
+    G.add_nodes_from(requests.index)
+    edges = list()
+    for i, row in rides.iterrows():
+        if len(row.indexes)>1:
+            for j, pax1 in enumerate(row.indexes):
+                for k, pax2 in enumerate(row.indexes):
+                    if pax1 != pax2:
+                        edges.append((pax1, pax2))
+
+    G.add_edges_from(edges)
+    return G
+
 def make_graph(requests, rides,
                mu=0.5, plot=False,
                figname=None, node_size=0.5,
