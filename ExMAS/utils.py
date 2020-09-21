@@ -426,7 +426,8 @@ def synthetic_demand_poly_II(_inData, _params=None):
         dist.append(samp_destination['distance'].values[0])
 
     requests['destination'] = destination
-    requests['dist'] = dist
+    #requests['dist'] = dist
+    requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
 
     # 4 make travel times (without using speed, speed param is used inside cal_sblt)
     requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
