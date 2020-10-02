@@ -2,6 +2,5 @@ networkx==2.4
 pandas==1.0.5
 matplotlib==3.2.2
 dotmap==1.2.20
-osmnx==0.15.0
 PuLP==1.6.8
 numpy==1.18.5
