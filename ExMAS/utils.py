@@ -69,13 +69,18 @@ def make_paths(params, relative = False):
     return params
 
 
-def get_config(path):
+def get_config(path, root_path = None):
     # reads a .json file with MaaSSim configuration
     # use as: params = get_config(config.json)
     with open(path) as json_file:
         data = json.load(json_file)
         config = DotMap(data)
     config['t0'] = pd.Timestamp('15:00')
+
+    if root_path is not None:
+        config.paths.G = os.path.join(root_path, config.paths.G)  # graphml of a current .city
+        config.paths.skim = os.path.join(root_path,config.paths.skim)  # csv with a skim between the nodes of the .city
+
     return config
 
 

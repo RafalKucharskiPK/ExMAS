@@ -19,7 +19,7 @@ class TestSimulationResults(unittest.TestCase):
     def test_results(self):
         import ExMAS.utils
 
-        params = ExMAS.utils.get_config(CONFIG_PATH)
+        params = ExMAS.utils.get_config(CONFIG_PATH, root_path=os.path.dirname(__file__))
 
         params.t0 = pd.Timestamp.now()
 
@@ -42,8 +42,7 @@ class TestSimulationResults(unittest.TestCase):
     def test_big(selfs):
         import ExMAS.utils
 
-        params = ExMAS.utils.get_config(CONFIG_PATH)
-        # params = ExMAS.utils.make_paths(params)
+        params = ExMAS.utils.get_config(CONFIG_PATH, root_path=os.path.dirname(__file__))
         params.nP = 1000
         params.shared_discount = 0.15
 
@@ -68,7 +67,7 @@ class TestSimulationResults(unittest.TestCase):
     def test_discount_works(selfs):
         import ExMAS.utils
 
-        params = ExMAS.utils.get_config(CONFIG_PATH)
+        params = ExMAS.utils.get_config(CONFIG_PATH, root_path=os.path.dirname(__file__))
         # params = ExMAS.utils.make_paths(params)
 
         params.t0 = pd.Timestamp.now()
@@ -94,7 +93,7 @@ class TestSimulationResults(unittest.TestCase):
     def test_VoT_works(selfs):
         import ExMAS.utils
 
-        params = ExMAS.utils.get_config(CONFIG_PATH)
+        params = ExMAS.utils.get_config(CONFIG_PATH, root_path=os.path.dirname(__file__))
         # params = ExMAS.utils.make_paths(params)
 
         params.t0 = pd.Timestamp.now()
@@ -115,10 +114,11 @@ class TestSimulationResults(unittest.TestCase):
 
         assert KPI_35.shared_ratio > KPI_90.shared_ratio  # some vehicles share
 
+
     def test_WtS_works(selfs):
         import ExMAS.utils
 
-        params = ExMAS.utils.get_config(CONFIG_PATH)
+        params = ExMAS.utils.get_config(CONFIG_PATH, root_path=os.path.dirname(__file__))
         # params = ExMAS.utils.make_paths(params)
 
         params.t0 = pd.Timestamp.now()
