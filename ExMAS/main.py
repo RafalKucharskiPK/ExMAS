@@ -950,8 +950,10 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     for imr in m:
         j += 1
         prob += pulp.lpSum([imr[i] * variables[i] for i in variables if imr[i] > 0]) == 1, 'c' + str(j)
-
-    prob.solve()  # main otpimization call
+    solver = pulp.get_solver('PULP_CBC_CMD')
+    solver.msg = False
+    prob.solve(solver)  # main otpimization call
+    #prob.solve()  # main otpimization call
 
     logger.info('Problem solution: {}. \n'
           'Total costs for single trips:  {:13,} '
