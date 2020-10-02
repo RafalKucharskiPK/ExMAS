@@ -3,4 +3,6 @@
 *.png
 .DS_Store
 .ipynb_checkpoints
+*/.ipynb_checkpoints/*
 
+ExMAS/spinoffs/corona/.ipynb_checkpoints/corona-checkpoint.ipynb
