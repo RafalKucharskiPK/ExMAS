@@ -21,7 +21,7 @@ install:
  - pip install coveralls
 script:
  - python -m unittest tests/ExMAS_test.py
- - coverage run tests/ExMAS_test.py
+ - coverage run -m unittest tests/ExMAS_test.py
 
 after_success:
  - coveralls
