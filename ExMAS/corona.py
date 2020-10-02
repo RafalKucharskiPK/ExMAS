@@ -458,7 +458,7 @@ def degrees(replications = 10):
     pd.DataFrame(ret).to_csv('degrees.csv')
 
 
-def corona_run(workers=8, replications=10, search_space=None, test=False, prep = True, brute = True):
+def corona_run(workers=8, replications=10, search_space=None, test=False, prep=True, brute=True):
     if test:
         search_space = DotMap()
         search_space.initial_share = [0.001]
@@ -467,13 +467,19 @@ def corona_run(workers=8, replications=10, search_space=None, test=False, prep =
 
         if search_space is None:
             search_space = DotMap()
-            search_space.initial_share = [0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2]
+            search_space.initial_share = [0.001, 0.002, 0.005, 0.01]
             search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
 
     from ExMAS.utils import inData as inData
     params = get_config('ExMAS/data/configs/corona.json')
     params = ExMAS.utils.make_paths(params)
     params.logger_level = 'INFO'
+    params.nP = 3200
+    params.corona.participation = 2000 / 3200
+    params.shared_discount = 0.2
+    #params.corona.p = 1
+    #params.corona.initial_share = 0.001
+    params.WtS = 1.35
 
     if prep:
         params.prep_only = True
@@ -494,5 +500,6 @@ def corona_run(workers=8, replications=10, search_space=None, test=False, prep =
 
 
 if __name__ == "__main__":
-    corona_run(workers=1, replications=1, prep = True, test=True, brute = False)
+    corona_run(workers=2, replications=10, prep=False, test=False, brute=True)
+
 
