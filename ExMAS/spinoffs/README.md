@@ -13,6 +13,7 @@
 * [Corona](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/spinoffs/sandbox) models, experiments and their results to model virus spreading in ride-poooling networks
 * [Potential](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/spinoffs/potential) exploring shareability potential with various demand settings
 * [Game theory in matching](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/spinoffs/game) algorithms for user optimal assignment for matching to shared-rides
+* [Late arrival](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/spinoffs/late_arrival) code to reporduce material for _If you are late, everyone is late: Late passenger arrival and ride-pooling systems'' performance DOI:	10.1080/23249935.2020.1829170, Journal:	Transportmetrica A: Transport Science, Kucharski, Fielabum, Alonso-Mora, Cats, 2020_
 * [Sandbox](https://github.com/RafalKucharskiPK/ExMAS/blob/master/ExMAS/spinoffs/sandbox) various unfinished projects, tests, etc.
 
 
