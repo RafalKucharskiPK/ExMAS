@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+
+"""
+# ExMAS Virus spreading
+> Functions and modules used to simulate virus spreading on ride-pooling networks
+---
+
+----
+Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
+"""
+
 import pandas as pd
 import random
 import ExMAS
@@ -5,14 +16,13 @@ from ExMAS.experiments import slice_space
 import networkx as nx
 import ExMAS.utils
 import scipy
-from ExMAS.utils import inData as mData
 import json
 from dotmap import DotMap
 from ExMAS.main import init_log
 import matplotlib.pyplot as plt
 from ExMAS.utils import get_config
 from ExMAS.main import matching
-# import seaborn as sns
+
 import math
 import osmnx as ox
 import time
@@ -21,10 +31,10 @@ import time
 def infect(inData, day, params):
     """
     for a given infected travellers and their shared rides schedule return requests with newly_infected travellers
-    :param schedule: shared rides
-    :param requests: travellers and their trips requests
-    :param params: parameters
-    :return: requests with column newly_infected
+    :param inData: container with schedule: shared rides | requests: travellers and their trips requests
+    :param day: consecutive day of simulation
+    :param params: params: parameters
+    :return: equests with column newly_infected
     """
     got_infected = dict()
     infected_by = dict()
@@ -42,7 +52,6 @@ def infect(inData, day, params):
     inData.passengers['infected_by'].update(pd.Series(infected_by))  # update by whom infected
     # change state of those infected today
     inData.passengers['state'] = inData.passengers.apply(lambda x: 'I' if x.infection_day == day else x.state, axis=1)
-
 
     return inData
 
@@ -345,6 +354,7 @@ def plot_spread(inData, MODE='paths'):
 
 def did_i_infect_you(time, day, params):
     # generic model to determine if you infected me while we travelled together for 'time' seconds
+    # can be extended to cover for non-detemrnistic infection
     if time > params.corona.time_threshold:
         return day
     else:
@@ -354,7 +364,7 @@ def did_i_infect_you(time, day, params):
 def infection_map(inData):
     """
     traces infections from initial ones
-    :param inData:
+    :param inData: with fields populated after the simulation is done
     :return: dictionary infection_map[intial_infector][level][list of travellers infected at this step]
     """
     infection_map = dict()
@@ -394,45 +404,6 @@ def time_together(ride, i, j, _print=False):
     return overlap
 
 
-def redo_matching(inData, params, _print):
-    # DEPRECATED
-    """
-    updates which travellers are still active (not quarantined),
-    removes rides composed with travellers who are quarantines (at least one)
-    rematches travellers who are still active
-    :param inData:
-    :param params:
-    :param _print:
-    :return:
-    """
-
-    # 1. Update travellers
-    inData.passengers['active'] = inData.passengers.apply(
-        lambda x: True if (x.active_today and x.state != 'Q') else False, axis=1)
-    inData.requests = inData.all_requests.loc[inData.passengers.active == True]
-
-    # 2. update rides
-    inactives = set(inData.all_requests.loc[inData.passengers.active == False].index)
-
-    inData.all_rides['active'] = inData.all_rides.apply(
-        lambda ride: True if len(list(set(ride.indexes) & inactives)) == 0 else False, axis=1)
-
-    # inData.all_rides['active'] = inData.all_rides.apply(lambda ride: True if
-    # inData.population.loc[ride.indexes][(inData.population.loc[ride.indexes].active == False)].shape[0] == 0 else False,
-    #                                                     axis=1)
-
-    inData.sblts.rides = inData.all_rides[inData.all_rides.active]
-    # do matching
-    inData.logger.info(
-        'Re matching, {} travellers quarantined, {} inactive today. {} out of {} rides remain feasible'.format(
-            inData.passengers[inData.passengers.state == "Q"].shape[0],
-            inData.passengers[inData.passengers.active_today == False].shape[0],
-            inData.sblts.rides.shape[0],
-            inData.all_rides.shape[0]))
-
-    return matching(inData, params.shareability, _print=False, make_assertion=False)
-
-
 def active_today(inData, params):
     active_ones = inData.passengers[(inData.passengers.active == True)]
     active_ones = active_ones.sample(int(active_ones.shape[0] * params.corona.p))  # those are active today
@@ -450,6 +421,7 @@ def active_today(inData, params):
 
 
 def degrees(replications = 10):
+    # simulate contact network evolution (without matching)
     from ExMAS.utils import inData as inData
     params = ExMAS.utils.get_config('ExMAS/spinoffs/corona.json')  # load the default
     params.nP = 3200
@@ -521,9 +493,6 @@ def corona_run(workers=8, replications=10, search_space=None, test=False, prep =
         pipe(inData, params)
 
 
-
-
 if __name__ == "__main__":
-    degrees(replications=10)
-    #corona_run(workers=1, replications=1, prep = True, test=True, brute = False)
+    corona_run(workers=1, replications=1, prep = True, test=True, brute = False)
 

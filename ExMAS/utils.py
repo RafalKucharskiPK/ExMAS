@@ -52,9 +52,10 @@ KPIs_descriptions = ['total travel time of vehicles (with travellers only)',
                      'maximal discount to be offered while profitable', 'sys', 'sys']
 
 
-def make_paths(params):
+def make_paths(params, relative = False):
     # call it whenever you change a city name, or main path
     params.paths.main = "ExMAS"
+
     params.paths.data = os.path.join(params.paths.main, 'data')
     params.paths.params = os.path.join(params.paths.data, 'configs')
     params.paths.albatross = os.path.join(params.paths.data, 'albatross')  # albatross data
@@ -525,6 +526,15 @@ def mode_choices(_inData, sp):
     return _inData
 
 
+def load_requests(path):
+    requests = pd.read_csv(path, index_col=0)
+    requests.treq = pd.to_datetime(requests.treq)
+    requests['pax_id'] = requests.index.copy()
+    requests.tarr = pd.to_datetime(requests.tarr)
+    requests.ttrav = pd.to_timedelta(requests.ttrav)
+    return requests
+
+
 def plot_demand(inData, params, t0=None, vehicles=False, s=10):
     if t0 is None:
         t0 = inData.requests.treq.mean()
@@ -539,7 +549,7 @@ def plot_demand(inData, params, t0=None, vehicles=False, s=10):
     plt.show()
     fig, ax = ox.plot_graph(inData.G, figsize=(10, 10), node_size=0, edge_linewidth=0.5,
                             show=False, close=False,
-                            edge_color='white')
+                            edge_color='grey', bgcolor = 'white' )
     for _, r in inData.requests.iterrows():
         ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=s, marker='D')
         ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=s)
@@ -549,7 +559,7 @@ def plot_demand(inData, params, t0=None, vehicles=False, s=10):
     ax.scatter(inData.G.nodes[inData.stats['center']]['x'], inData.G.nodes[inData.stats['center']]['y'], c='red',
                s=10 * s, marker='+')
     plt.title(
-        'Demand in {} with origins marked in green, destinations in orange and vehicles in blue'.format(params.city))
+        'Demand in {} with origins marked in green, destinations in orange'.format(params.city))
     plt.show()
 
 
