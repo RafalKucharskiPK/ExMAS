@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.7, 3.8]
 
     steps:
     - uses: actions/checkout@v2
@@ -34,7 +34,6 @@ jobs:
         hash -r
         conda config --set always_yes yes --set changeps1 no
         conda update -q conda
-        Useful for debugging any issues with conda
         conda info -a
         conda config --prepend channels conda-forge
         conda create -n ox --strict-channel-priority osmnx
