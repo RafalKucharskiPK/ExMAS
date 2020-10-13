@@ -51,6 +51,7 @@ jobs:
         pip install pytest
         pip install pytest-cov
         pip install coveralls
+        conda activate ox
         coverage run -m unittest tests/ExMAS_test.py
         pip install setuptools wheel twine
     - name: Build and publish
