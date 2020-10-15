@@ -20,7 +20,7 @@ def search_space_csvs():
         space = DotMap()
         path = "/Users/rkucharski/Documents/GitHub/ExMAS/ExMAS/spinoffs/potential/generated_requests"
 
-        space.requests = glob.glob(path + "/*.csv")
+        space.requests = glob.glob(path + "/requests_*.csv")
 
         return space
 
@@ -89,8 +89,10 @@ def exploit_csvs(one_slice, *args):
     stamp['search_space'] = inData.sblts.rides.shape[0]
     ret = pd.concat([inData.sblts.res, pd.Series(stamp)])
 
-    filename = "res_KPI_" + _params['requests']
-    ret.to_frame().to_csv(os.path.join('ExMAS/spinoffs/potential/results', filename + '.csv'))
+    filename = _params['requests'].replace('requests_','results_KPI_')
+    ret.to_frame().to_csv(filename)
+    inData.sblts.requests.to_csv(filename.replace('results_KPI_', 'request_results_'))
+    inData.sblts.schedule.to_csv(filename.replace('results_KPI_', 'schedule_results_'))
     print(filename, pd.Timestamp.now(), 'done')
     return 0
 
