@@ -156,7 +156,7 @@ def load_G(inData, _params=None, stats=False, set_t=True):
 # RESULTS #
 ###########
 
-def merge_csvs(params = None, path = None, to_numeric=True):
+def merge_csvs(params = None, path = None, to_numeric=True, read_columns_from_filename = False):
     """ merges csvs in one folder into a single DF"""
     import glob
 
@@ -164,11 +164,16 @@ def merge_csvs(params = None, path = None, to_numeric=True):
         path = params.paths.sblt
     # merge csvs in a single folder with unit results
     # returns a DataFrame
-    all_files = glob.glob(path + "/*.csv")
+    all_files = glob.glob(path)
     l = list()
     for file_ in all_files:
-        df = pd.read_csv(file_, index_col=0)
-        l.append(df.T)
+        df = pd.read_csv(file_, index_col=0).T
+        if read_columns_from_filename:
+            fields = file_.replace(path[:-5],'')[:-4].split("_")
+            df[fields[0]] = fields[1]  # n centers
+            df['gammdist_shape'] = fields[4]
+            df['gamma_imp_shape'] = fields[8]
+        l.append(df)
 
     res = pd.concat(l)
     if to_numeric:
