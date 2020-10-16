@@ -5,7 +5,7 @@
 > Collection of jupyter notebooks applying ExMAS code in various studies.
 ---
 
-![MAP](ExMAS/data/map.png)
+![MAP](../data/map.png)
 
 
 ### Documentation

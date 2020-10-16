@@ -156,7 +156,7 @@ def load_G(inData, _params=None, stats=False, set_t=True):
 # RESULTS #
 ###########
 
-def merge_csvs(params = None, path = None, to_numeric=True):
+def merge_csvs(params = None, path = None, to_numeric=True, read_columns_from_filename = False):
     """ merges csvs in one folder into a single DF"""
     import glob
 
@@ -164,11 +164,16 @@ def merge_csvs(params = None, path = None, to_numeric=True):
         path = params.paths.sblt
     # merge csvs in a single folder with unit results
     # returns a DataFrame
-    all_files = glob.glob(path + "/*.csv")
+    all_files = glob.glob(path)
     l = list()
     for file_ in all_files:
-        df = pd.read_csv(file_, index_col=0)
-        l.append(df.T)
+        df = pd.read_csv(file_, index_col=0).T
+        if read_columns_from_filename:
+            fields = file_.replace(path[:-5],'')[:-4].split("_")
+            df[fields[0]] = fields[1]  # n centers
+            df['gammdist_shape'] = fields[4]
+            df['gamma_imp_shape'] = fields[8]
+        l.append(df)
 
     res = pd.concat(l)
     if to_numeric:
@@ -335,15 +340,18 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     return _inData
 
 
-def synthetic_demand_poly_II(_inData, _params=None):
-    from scipy.stats import gamma as gamma_random
+def synthetic_demand_poly(_inData, _params=None):
     from random import seed
-    origins_albatross = pd.read_csv('ExMAS/data/albatross/AM_origins.csv', index_col=0)
+    from scipy.stats import gamma as gamma_random
+    print(os.getcwd())
+
+    origins_albatross = pd.read_csv('ExMAS/spinoffs/potential/AM_origins.csv', index_col=0)
     origins_albatross = origins_albatross[
-    origins_albatross['origin'].isin(_inData.skim.index)]  # droping those origins not in skim
+        origins_albatross['origin'].isin(inData.skim.index)]  # droping those origins not in skim
 
-
-
+    # Sample_origins = origins_albatross.sample(params.nP)
+    # Sample_origins.to_csv('Sample_origins.csv')
+    Sample_origins = pd.read_csv('ExMAS/spinoffs/potential/Sample_origins.csv', index_col=0).sample(_params.nP)
     # 1. create a passenger DataFrame
 
     df = pd.DataFrame(index=np.arange(1, _params.nP + 1), columns=_inData.passengers.columns)
@@ -353,42 +361,59 @@ def synthetic_demand_poly_II(_inData, _params=None):
     df.pos = df.apply(lambda x: rand_node(_inData.nodes), axis=1)
     _inData.passengers = df
 
+    print('1', pd.Timestamp.now())
+
     # 1. create a Centers and potential destinations
-    Centers = []
+    Centers = pd.DataFrame(data={'name': ['Dam Square', 'Station Zuid', 'Concertgebouw', 'Sloterdijk'],
+                                 'x': [4.8909126, 4.871887, 4.8790061, 4.8351158],
+                                 'y': [52.373095, 52.338948, 52.356275, 52.3888349]})
+    Centers['node'] = Centers.apply(lambda center: get_nearest_node(_inData.G, (center.y, center.x)), axis=1)
+
+    # drop not considered centers
+    Centers = Centers[Centers.index.isin(range(_params.nCenters))]
+
     Dist = []
 
-    rdist = gamma_random(a=_params.gammdist.shape, scale=_params.gammdist.scale)
+    rdist = gamma_random(a=_params.gammdist_shape, scale=_params.gammdist_scale)
 
     for i in range(_params.nCenters):
-        Centers.append(rand_node(_inData.nodes))
-
         # 2. distances and probabiltiies for each node #get distances from centre for each node
-        _distances = _inData.skim[Centers[i]].to_frame().dropna()  # compute distances from center
+        _distances = _inData.skim.transpose()[Centers['node'][i]].to_frame().dropna()  # compute distances from center
         _distances.columns = ['distance']
         _distances = _distances[
             _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
 
-        while (sum(_distances['distance']) == 0):
-            Centers[i] = rand_node(_inData.nodes)
-            _distances = _inData.skim[Centers[i]].to_frame().dropna()  # compute distances from center
-            _distances.columns = ['distance']
-            _distances = _distances[
-                _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
-
         # apply distributions to obtain probability of destination
-
         _distances['p_destination'] = _distances['distance'].apply(lambda x: rdist.pdf(x))
 
+        _distances['dist_range'] = _distances['distance'].apply(lambda x: math.trunc(x / 500) + 1)
+        _distances_sum = _distances.groupby(by=['dist_range']).count()
+        _distances_sum = _distances_sum.reset_index()
+        _distances_sum = _distances_sum.drop(columns='p_destination')
+        _distances_sum.columns = ['dist_range', 'cant']
+        total = _distances_sum['cant'].mean()
+        index_id = _distances.index
+        _distances = _distances.merge(_distances_sum, on='dist_range', how='left')
+        _distances.index = index_id
+        _distances['fact'] = total / _distances['cant']
+        _distances['p_destination_fixed'] = _distances['p_destination'] * _distances['fact']
+
         Dist.append(_distances)
+
+    print('2', pd.Timestamp.now())
 
     randomdestinations = []
 
     # we can generate more potential destinations if desired
-    for i in range(_params.nP):
-        for j in range(_params.nCenters):
-            randomdestinations.append(Dist[j].sample(1, weights='p_destination', replace=True).index.values[0])
+    for i in range(_params.nCenters):
+        for j in range(_params.nP * 3):
+            randomdestinations.append(Dist[i].sample(1, weights='p_destination_fixed', replace=True).index.values[0])
 
-            # 3. create requests DataFrame
+    print('3', pd.Timestamp.now())
+
+    _inData.RandomDestinations = randomdestinations
+
+    # 3. create requests DataFrame
     requests = pd.DataFrame(index=df.index, columns=_inData.requests.columns)
 
     # 3.a. draw random departure time
@@ -399,7 +424,7 @@ def synthetic_demand_poly_II(_inData, _params=None):
     requests.treq = [_params.t0 + pd.Timedelta(int(_), 's') for _ in treq]
 
     # 3.b. draw origin sampling albatross origins
-    requests.origin = origins_albatross.sample(_params.nP).values
+    requests.origin = Sample_origins.values
 
     # 3.c. draw destination with a probability
     # seed fixed or not?
@@ -408,53 +433,72 @@ def synthetic_demand_poly_II(_inData, _params=None):
     destination = []
     dist = []
 
-    rdist = gamma_random(a=_params.gamma_imp.shape, scale=_params.gamma_imp.scale)
+    print('4', pd.Timestamp.now())
+
+    rdist = gamma_random(a=_params.gamma_imp_shape, scale=_params.gamma_imp_scale)
 
     for i in range(_params.nP):
-        _distances = _inData.skim[requests.origin[i + 1]].to_frame().dropna()  # compute distances from center
-        _distances.columns = ['distance']
-        _distances = _distances[
-            _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
+
+        _distances = pd.DataFrame(randomdestinations)
+        _distances.columns = ["id"]
+        _distances['distance'] = _distances.apply(lambda request: _inData.skim.loc[requests.origin[i + 1], request.id],
+                                                  axis=1)
+        _distances = _distances[_distances['distance'] < _params.dist_threshold]
 
         while (sum(_distances['distance']) == 0):
             requests.origin[i + 1] = origins_albatross['origin'].sample(1, replace=True).values[0]
-            _distances = _inData.skim[requests.origin[i + 1]].to_frame().dropna()  # compute distances from center
-            _distances.columns = ['distance']
-            _distances = _distances[
-                _distances['distance'] < _params.dist_threshold]  # drop disconnected points from choice set
-            _distances = _distances[_distances.index.isin(randomdestinations)]
+            _distances = pd.DataFrame(randomdestinations)
+            _distances.columns = ["id"]
+            _distances['distance'] = _distances.apply(
+                lambda request: _inData.skim.loc[requests.origin[i + 1], request.id], axis=1)
+            _distances = _distances[_distances['distance'] < _params.dist_threshold]
+            # print('loop gravity',requests.origin[i+1],sum(_distances['distance']) ,pd.Timestamp.now())
 
         # apply distributions to obtain probability of destination
 
         _distances['p_destination'] = _distances['distance'].apply(lambda x: rdist.pdf(x))
-        samp_destination = _distances.sample(1, weights='p_destination', replace=True)
-        destination.append(samp_destination.index.values[0])
-        dist.append(samp_destination['distance'].values[0])
 
-    requests['destination'] = destination
-    #requests['dist'] = dist
-    requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
+        _distances['dist_range'] = _distances['distance'].apply(lambda x: math.trunc(x / 500) + 1)
+        _distances_sum = _distances.groupby(by=['dist_range']).count()
+        _distances_sum = _distances_sum.reset_index()
+        _distances_sum = _distances_sum.drop(columns=['id', 'p_destination'])
+        _distances_sum.columns = ['dist_range', 'cant']
+        _distances_sum
+
+        total = _distances_sum['cant'].mean()
+        index_id = _distances.index
+        _distances = _distances.merge(_distances_sum, on='dist_range', how='left')
+        _distances.index = index_id
+        _distances['fact'] = total / _distances['cant']
+        _distances['p_destination_fixed'] = _distances['p_destination'] * _distances['fact']
+
+        samp_destination = _distances.sample(1, weights='p_destination_fixed', replace=True)
+        destination.append(samp_destination['id'].values[0])
+        dist.append(samp_destination['distance'].values[0])
+        # print('iter ',i,pd.Timestamp.now())
+
+    print('5', pd.Timestamp.now())
+
+    requests.destination = destination
+    requests.dist = dist
+    requests['dist'] = dist
+    # requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
 
     # 4 make travel times (without using speed, speed param is used inside cal_sblt)
     requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
 
-    requests['tarr'] = [request.treq + request.ttrav for _, request in requests.iterrows()]
+    requests.tarr = [request.treq + request.ttrav for _, request in requests.iterrows()]
+
     requests = requests.sort_values('treq')
-    requests['pax_id'] = requests.index.copy()
+    requests.index = df.index
 
     # output
-    _inData['requests'] = requests
-    _inData['passengers'].pos = _inData.requests.origin
-    _inData['probs'] = dist
-    _inData['centers'] = Centers
+    _inData.requests = requests
+    _inData.passengers.pos = requests.origin
+    _inData.probs = requests.dist
+    _inData.centers = Centers
 
-    DistbtwnCenters = []
-    for i in range(0, _params.nCenters - 1):
-        for j in range(i + 1, _params.nCenters):
-            DistbtwnCenters.append(_inData.skim.loc[Centers[i], Centers[j]])
-
-    _inData.DistbtwnCenters_mean = np.mean(DistbtwnCenters)
-    _inData.DistbtwnCenters_std = np.std(DistbtwnCenters)
+    print('6', pd.Timestamp.now())
 
     return _inData
 
@@ -537,6 +581,8 @@ def load_requests(path):
     requests['pax_id'] = requests.index.copy()
     requests.tarr = pd.to_datetime(requests.tarr)
     requests.ttrav = pd.to_timedelta(requests.ttrav)
+    #requests.origin = requests.origin.astype(int)
+    #requests.destination = requests.destination.astype(int)
     return requests
 
 

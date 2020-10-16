@@ -99,7 +99,8 @@ def exploit_search_space(one_slice, *args):
 ########
 
 
-def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-1, replications = 1):
+def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-1, replications = 1,
+               func = exploit_search_space, logger_level = 'CRITICAL'):
     """
     Explores the search space `space` starting from base configuration from `config` using `workers` parallel threads`
     :param space:
@@ -109,8 +110,10 @@ def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-
     :return: set of csvs in 'data/results`
     """
     inData = mData
+    os.chdir("C:/Users/sup-rkucharski/PycharmProjects/ExMAS")
+
     params = ExMAS.utils.get_config(config)
-    params.logger_level = 'CRITICAL'
+    params.logger_level = logger_level
     params.np = params.nP
     params.max_degree = 8
     params.t0 = pd.to_datetime('15:00')
@@ -120,7 +123,7 @@ def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-
     else:
         search_space = space
 
-    scipy.optimize.brute(func=exploit_search_space,
+    scipy.optimize.brute(func=func,
                          ranges=slice_space(search_space,replications = replications),
                          args=(inData, params, search_space),
                          full_output=True,
