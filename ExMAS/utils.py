@@ -576,8 +576,8 @@ def load_requests(path):
     requests['pax_id'] = requests.index.copy()
     requests.tarr = pd.to_datetime(requests.tarr)
     requests.ttrav = pd.to_timedelta(requests.ttrav)
-    requests.origin = requests.origin.astype(int)
-    requests.destination = requests.destination.astype(int)
+    #requests.origin = requests.origin.astype(int)
+    #requests.destination = requests.destination.astype(int)
     return requests
 
 

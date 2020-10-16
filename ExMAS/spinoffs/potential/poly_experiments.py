@@ -18,7 +18,7 @@ def get_centers():
 def search_space_csvs():
         # system settings analysis
         space = DotMap()
-        path = "/Users/rkucharski/Documents/GitHub/ExMAS/ExMAS/spinoffs/potential/generated_requests"
+        path = "ExMAS/spinoffs/potential/requests"
 
         space.requests = glob.glob(path + "/requests_*.csv")
 
@@ -26,15 +26,11 @@ def search_space_csvs():
 
 def search_space_requests():
     space = DotMap()
+    space.nP = [500,1000,2000]
     space.nCenters = [1, 2, 3, 4]
-
-    space.gammdist_shape = [1.5, 2.5, 4, 6]
-
-    space.gamma_imp_shape = [1, 1.15, 2, 3]
-    space.gammdist_shape = [1.5]
-
-    space.gamma_imp_shape = [1]
-    space.replication = [1]
+    space.gammdist_shape = [1, 1.5, 2, 2.5, 4, 6]
+    space.gamma_imp_shape = [1, 1.15, 2, 3, 4]
+    space.replication = list(range(1,11))
     return space
 
 
@@ -83,7 +79,9 @@ def exploit_csvs(one_slice, *args):
 
     inData.requests = ExMAS.utils.load_requests(_params['requests'])
     t0 = pd.Timestamp.now()
-    inData = ExMAS.main(inData, _params, plot=False)
+    params.logger_level = 'WARNING'
+    inData = ExMAS.main(inData, _params)
+
 
     stamp['dt'] = str(pd.Timestamp.now() - t0)
     stamp['search_space'] = inData.sblts.rides.shape[0]
@@ -99,12 +97,15 @@ def exploit_csvs(one_slice, *args):
 cwd = os.getcwd()
 os.chdir(os.path.join(cwd,'../../..'))
 
-# ExMAS.experiments.experiment(workers  = 1,
-#                              space = search_space_requests(),
-#                              config = "ExMAS/data/configs/potential_test.json",
-#                              func = create_demand)
 
-ExMAS.experiments.experiment(workers  = 1,
+
+# ExMAS.experiments.experiment(workers  = 1,
+#                                space = search_space_requests(),
+#                                config = "ExMAS/data/configs/potential.json",
+#                                func = create_demand)
+#
+ExMAS.experiments.experiment(workers = 1,
                              space = search_space_csvs(),
-                             config = "ExMAS/data/configs/potential_test.json",
-                             func = exploit_csvs)
+                             config = "ExMAS/data/configs/potential.json",
+                             func = exploit_csvs,
+                             logger_level= 'WARNING')
