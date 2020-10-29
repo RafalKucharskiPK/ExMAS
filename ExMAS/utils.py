@@ -339,6 +339,31 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     _inData.passengers.pos = _inData.requests.origin
     return _inData
 
+def requests_to_geopandas(inData, filename = None):
+    """
+    creates a geopandas dataframe with cooridinates Point(x,y) of origin and destination of request
+    :param inData: uses inData.requests and inData.nodes (with coordinates)
+    :param filename: path to save csv
+    :return: geopandas dataframe with geo requests
+    """
+    # those imports are local only to this functions
+    from shapely.geometry import Point
+    import geopandas as gpd
+
+    geo_requests = inData.requests
+    geo_requests['Point_o'] = geo_requests.apply(lambda r: Point(inData.nodes.loc[r.origin].x, inData.nodes.loc[r.origin].y),
+                                         axis=1)
+    geo_requests['Point_d'] = geo_requests.apply(
+        lambda r: Point(inData.nodes.loc[r.destination].x, inData.nodes.loc[r.destination].y), axis=1)
+    geo_requests = gpd.GeoDataFrame(geo_requests, geometry='Point_o')
+    if filename is not None:
+        geo_requests.to_csv(filename)
+    return geo_requests
+
+
+
+
+
 
 def synthetic_demand_poly(_inData, _params=None):
     from random import seed
