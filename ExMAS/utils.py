@@ -49,7 +49,49 @@ KPIs_descriptions = ['total travel time of vehicles (with travellers only)',
                      'what portion of rides were shared',
                      'proxy for the fleet size (lower bound)',
                      'as above yet in non-shared scenarion ',
-                     'maximal discount to be offered while profitable', 'sys', 'sys']
+                     'maximal discount to be offered while profitable',
+                     'sys',
+                     'sys']
+
+# definitions for KPIs
+rides_DESCRIPTIONS = ['travellers indexes',
+                      'total (dis)utility of travellers (eq. 4 from the paper)',
+                      'total (dis)utility of vehicle (ride time) [s]',
+                      'type of a trip (1 - single rides, 2* rides of 2nd degree, 3* rd degree, etc. second digit denotes FIFO/LIFO',
+                      '(dis) utilities of consecutive travellers',
+                      'sequence of times [first pickup (seconds of simulation) and consecutive time deltasalong the schedule',
+                      'indexes of consequently picked up travellers',
+                      'indexes of consequenctly droped off travellers',
+                      'degree (number of travellers)',
+                      'id',
+                      'savings in vehicle hours due to sharing',
+                      'total travel times without sharing',
+                      'row from incidence matrix used for ILP matching',
+                      'binary flag whether rides is selected as part of the solution']
+
+
+# definitions for KPIs
+trips_DESCRIPTIONS = ['id',
+                      'origin node (OSM index)',
+                      'destination node (OSM index)',
+                      'desired departure time',
+                      '[deprecated, from MaaSSim]',
+                      'travel time [s] (shortest)',
+                      'desired arrival time (pd.datetime)',
+                      '[deprecated, from MaaSSim]',
+                      'distance in meters (shortest)',
+                      'id',
+                      'value of time',
+                      'maximal acceptable delay (eq. 6 from the paper)',
+                      '(dis)utility of a non-shared ride',
+                      'utility of PT alternative (if computed)',
+                      'selected ride id (from *.schedule DataFrame)',
+                      'travel time in the solution (possibly shared)',
+                      '(dis) utility of selected ride',
+                      'type of selected ride',
+                      'index of being picked up in the  ride']
+
+
 
 
 def make_paths(params, relative = False):
@@ -339,6 +381,7 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     _inData.passengers.pos = _inData.requests.origin
     return _inData
 
+
 def requests_to_geopandas(inData, filename = None):
     """
     creates a geopandas dataframe with cooridinates Point(x,y) of origin and destination of request
@@ -353,16 +396,16 @@ def requests_to_geopandas(inData, filename = None):
     geo_requests = inData.requests
     geo_requests['Point_o'] = geo_requests.apply(lambda r: Point(inData.nodes.loc[r.origin].x, inData.nodes.loc[r.origin].y),
                                          axis=1)
+    geo_requests['origin_x'] = geo_requests.apply(lambda r: inData.nodes.loc[r.origin].x, axis=1)
+    geo_requests['origin_y'] = geo_requests.apply(lambda r: inData.nodes.loc[r.origin].y, axis=1)
     geo_requests['Point_d'] = geo_requests.apply(
         lambda r: Point(inData.nodes.loc[r.destination].x, inData.nodes.loc[r.destination].y), axis=1)
+    geo_requests['destination_x'] = geo_requests.apply(lambda r: inData.nodes.loc[r.destination].x, axis=1)
+    geo_requests['destination_y'] = geo_requests.apply(lambda r: inData.nodes.loc[r.destination].y, axis=1)
     geo_requests = gpd.GeoDataFrame(geo_requests, geometry='Point_o')
     if filename is not None:
         geo_requests.to_csv(filename)
     return geo_requests
-
-
-
-
 
 
 def synthetic_demand_poly(_inData, _params=None):
@@ -715,6 +758,65 @@ def make_graph(requests, rides,
             plt.savefig(figname)
     return G
 
+def prepare_PoA(inData):
+
+    m = np.vstack(inData.sblts.rides['row'].values).T  # creates a numpy array for the constrains
+    m = pd.DataFrame(m).astype(int)
+    plt.rcParams['figure.figsize'] = [12, int(12 * inData.sblts.rides.shape[0] / inData.requests.shape[0])]
+    fig, ax = plt.subplots()
+    ax.imshow(m, cmap='Greys', interpolation='Nearest')
+    ax.set_ylabel('rides')
+    _ = ax.set_xlabel('trips')
+    m.index.name = 'trips'
+    m.columns.name = 'rides'
+    m
+
+    m_user_costs = m.copy()
+    for col in m.columns:
+        new_col = [0] * inData.sblts.rides.shape[0]
+        indexes = inData.sblts.rides.loc[col]['indexes']
+        u_paxes = inData.sblts.rides.loc[col].u_paxes
+        for l, i in enumerate(indexes):
+            new_col[i] = u_paxes[l]
+        m_user_costs[col] = new_col
+    m_user_costs = m_user_costs.round(1)
+    m_user_costs = m_user_costs.replace(0, np.nan)
+    ranking = m_user_costs.replace(0, np.nan).rank(1, ascending=True, method='first')
+
+
+    inData.sblts.rides['rankings'] = inData.sblts.rides.apply(
+        lambda ride: [int(ranking.loc[traveller][ride.name]) for traveller in ride.indexes], axis=1)
+    inData.sblts.rides['mean_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rankings) / ride.degree, axis=1)
+    rel_ranking = ranking.div(ranking.max(axis=1), axis=0)
+    inData.sblts.rides['rel_rankings'] = inData.sblts.rides.apply(
+        lambda ride: [rel_ranking.loc[traveller][ride.name] for traveller in ride.indexes], axis=1)
+    inData.sblts.rides['mean_rel_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rel_rankings) / ride.degree,
+                                                                      axis=1)
+    inData.sblts.rides['PoA'] = inData.sblts.rides.apply(
+        lambda ride: [m_user_costs.loc[traveller][ride.name] - m_user_costs.loc[traveller].min() for traveller in
+                      ride.indexes], axis=1)
+    inData.sblts.rides['mean_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
+    inData.sblts.rides['total_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
+    return inData
 
 
 
+
+def calc_solution_PoA(inData):
+    indexes = dict()
+    utilities = dict()
+    for _ in inData.sblts.requests.index:
+        indexes[_] = list()
+        utilities[_] = list()
+    for i,row in inData.sblts.rides.iterrows():
+        for j,traveller in enumerate(row.indexes):
+            indexes[traveller] += [i]
+            utilities[traveller] += [row.u_paxes[j]]
+
+    inData.sblts.requests['ride_indexes'] = pd.Series(indexes)
+    inData.sblts.requests['ride_utilities'] = pd.Series(utilities)
+    inData.sblts.requests['min_utility'] = inData.sblts.requests['ride_utilities'].apply(lambda x: min(x))
+    inData.sblts.requests['PoA'] = inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']
+    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility'])/inData.sblts.requests['min_utility']
+    #inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
+    return inData
