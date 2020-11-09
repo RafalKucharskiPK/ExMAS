@@ -894,6 +894,8 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
         im_indexes[index] = i
         im_indexes_inv[i] = index
 
+
+
     im['lambda_r'] = im.apply(
         lambda x: params.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
         axis=1)
@@ -915,9 +917,10 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
             ret[request_indexes[i]] = 1
         return ret
 
-    logger.info('Matching {} trips to {} rides in order to minimize {}'.format(nR,
-                                                                               im.shape[0],
-                                                                               params.matching_obj)) if logger is not None else None
+    logger.info('Matching {} trips to {} rides in order to {} {}'.format(nR,
+                                                                         im.shape[0],
+                                                                         params.get('minmax','min'),
+                                                                         params.matching_obj)) if logger is not None else None
     im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
     m = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
 
@@ -932,7 +935,11 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     im = im.reset_index(drop=True)
 
     # optimization
-    prob = pulp.LpProblem("Matching problem", pulp.LpMinimize)  # problem
+    maxmin = params.get('minmax','min')
+    if maxmin == 'min':
+        prob = pulp.LpProblem("Matching problem", pulp.LpMinimize)  # problem
+    elif maxmin == 'max':
+        prob = pulp.LpProblem("Matching problem", pulp.LpMaximize)  # problem
 
     variables = pulp.LpVariable.dicts("r", (i for i in im.index), cat='Binary')  # decision variables
 
@@ -960,7 +967,7 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
           '\nreduced by matching to: {:20,}'.format(pulp.LpStatus[prob.status], int(sum(costs[:nR])),
                                                     int(pulp.value(prob.objective)))) if logger is not None else None
 
-    assert pulp.value(prob.objective) <= sum(costs[:nR]) + 2  # we did not go above original
+    # assert pulp.value(prob.objective) <= sum(costs[:nR]) + 2  # we did not go above original
 
     locs = dict()
     for variable in prob.variables():

@@ -760,20 +760,48 @@ def make_graph(requests, rides,
 
 def prepare_PoA(inData):
 
-    m = np.vstack(inData.sblts.rides['row'].values).T  # creates a numpy array for the constrains
+    im = inData.sblts.rides
+    r = inData.sblts.requests
+
+    request_indexes = dict()
+    request_indexes_inv = dict()
+    for i, index in enumerate(r.index.values):
+        request_indexes[index] = i
+        request_indexes_inv[i] = index
+
+    im_indexes = dict()
+    im_indexes_inv = dict()
+    for i, index in enumerate(im.index.values):
+        im_indexes[index] = i
+        im_indexes_inv[i] = index
+
+    r = r.reset_index()
+
+
+    nR = r.shape[0]
+
+    def add_binary_row(r):
+        ret = np.zeros(nR)
+        for i in r.indexes:
+            ret[request_indexes[i]] = 1
+        return ret
+
+    im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
+    m = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
     m = pd.DataFrame(m).astype(int)
-    plt.rcParams['figure.figsize'] = [12, int(12 * inData.sblts.rides.shape[0] / inData.requests.shape[0])]
-    fig, ax = plt.subplots()
-    ax.imshow(m, cmap='Greys', interpolation='Nearest')
-    ax.set_ylabel('rides')
-    _ = ax.set_xlabel('trips')
+
+
+    im['index'] = im.index.copy()
+
+    im = im.reset_index(drop=True)
+
     m.index.name = 'trips'
     m.columns.name = 'rides'
-    m
 
     m_user_costs = m.copy()
+
     for col in m.columns:
-        new_col = [0] * inData.sblts.rides.shape[0]
+        new_col = [0] * inData.sblts.requests.shape[0]
         indexes = inData.sblts.rides.loc[col]['indexes']
         u_paxes = inData.sblts.rides.loc[col].u_paxes
         for l, i in enumerate(indexes):
@@ -781,28 +809,69 @@ def prepare_PoA(inData):
         m_user_costs[col] = new_col
     m_user_costs = m_user_costs.round(1)
     m_user_costs = m_user_costs.replace(0, np.nan)
+
     ranking = m_user_costs.replace(0, np.nan).rank(1, ascending=True, method='first')
 
+    beta = -10  # behavioural parameter
 
+    probs = m_user_costs.replace(0, np.inf)  # set rides without this pax to inf
+    probs = probs.applymap(lambda x: math.exp(beta * x))  # calculate exp to MNL
+    probs = probs.div(probs.sum(axis=1), axis=0)  # divide by sum of utilities
+
+
+    inData.sblts.ranking_matrix = ranking
+    inData.sblts.incidence_matrix = m
+    inData.sblts.cost_matrix = m_user_costs
+    inData.sblts.probabilities_matrix = probs
+
+
+    #possible obj functions to PoA (per ride, not per traveller in ride)
+    inData.sblts.rides['degree'] = inData.sblts.rides.apply(lambda x: len(x.indexes), axis=1)
+
+    #A: mean ranking for each traveller
     inData.sblts.rides['rankings'] = inData.sblts.rides.apply(
         lambda ride: [int(ranking.loc[traveller][ride.name]) for traveller in ride.indexes], axis=1)
-    inData.sblts.rides['mean_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rankings) / ride.degree, axis=1)
+    inData.sblts.rides['mean_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rankings) / len(ride.indexes), axis=1)
     rel_ranking = ranking.div(ranking.max(axis=1), axis=0)
+
+    #B: mean relative ranking for each traveller
     inData.sblts.rides['rel_rankings'] = inData.sblts.rides.apply(
         lambda ride: [rel_ranking.loc[traveller][ride.name] for traveller in ride.indexes], axis=1)
-    inData.sblts.rides['mean_rel_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rel_rankings) / ride.degree,
+    inData.sblts.rides['mean_rel_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rel_rankings) / len(ride.indexes),
                                                                       axis=1)
-    inData.sblts.rides['PoA'] = inData.sblts.rides.apply(
+
+    #C: mean PoA for travellers
+    inData.sblts.rides['PoAs'] = inData.sblts.rides.apply(
         lambda ride: [m_user_costs.loc[traveller][ride.name] - m_user_costs.loc[traveller].min() for traveller in
                       ride.indexes], axis=1)
-    inData.sblts.rides['mean_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
-    inData.sblts.rides['total_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
+
+    inData.sblts.rides['mean_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoAs) / len(ride.indexes), axis=1)
+
+    # D: total PoA
+    inData.sblts.rides['total_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoAs) , axis=1)
+
+    # E: Sum of Squares PoA
+    inData.sblts.rides['squared_PoA'] = inData.sblts.rides.apply(lambda ride: sum( _*_ for _ in ride.PoAs) / len(ride.indexes), axis=1)
+
+
+    # Probabilities
+    inData.sblts.rides['probs'] = inData.sblts.rides.apply(
+        lambda ride: [inData.sblts.probabilities_matrix.loc[traveller][ride.name] for traveller in
+                      ride.indexes], axis=1)
+
+    # minimal probability
+    inData.sblts.rides['min_prob'] = inData.sblts.rides.apply(lambda ride: min(ride.probs) , axis=1)
+
+    # log sum of probabilities
+    inData.sblts.rides['logsum_prob'] = inData.sblts.rides.apply(lambda ride: sum(math.log(_) for _ in ride.probs), axis=1)
+
     return inData
 
 
 
 
 def calc_solution_PoA(inData):
+    #prep
     indexes = dict()
     utilities = dict()
     for _ in inData.sblts.requests.index:
@@ -815,8 +884,12 @@ def calc_solution_PoA(inData):
 
     inData.sblts.requests['ride_indexes'] = pd.Series(indexes)
     inData.sblts.requests['ride_utilities'] = pd.Series(utilities)
-    inData.sblts.requests['min_utility'] = inData.sblts.requests['ride_utilities'].apply(lambda x: min(x))
-    inData.sblts.requests['PoA'] = inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']
-    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility'])/inData.sblts.requests['min_utility']
-    #inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
+
+    # best possible
+    inData.sblts.requests['best'] = inData.sblts.requests['ride_utilities'].apply(lambda x: min(x))
+    # worst possible
+    inData.sblts.requests['worst'] = inData.sblts.requests['ride_utilities'].apply(lambda x: max(x))
+    inData.sblts.requests['PoA'] = inData.sblts.requests['u_sh'] - inData.sblts.requests['best']
+    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['best'])/inData.sblts.requests['best']
+    inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(inData.sblts.ranking_matrix.loc[x.name][x.ride_id]),axis= 1)
     return inData
