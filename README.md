@@ -45,8 +45,6 @@ clone this repository for latest version
 
 or use one of [releases](https://github.com/RafalKucharskiPK/ExMAS/archive/0.9.9.tar.gz) for stable versions
 
--marko test-2
-2
 
 ----
 Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
