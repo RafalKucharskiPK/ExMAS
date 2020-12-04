@@ -2,6 +2,8 @@
 setup.cfg
 setup.py
 ExMAS/__init__.py
+ExMAS/corona.py
 ExMAS/experiments.py
+ExMAS/games.py
 ExMAS/main.py
 ExMAS/utils.py
