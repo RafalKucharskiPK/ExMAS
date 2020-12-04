@@ -803,8 +803,9 @@ def matching(_inData, params, plot=False, make_assertion=True):
     rides = _inData.sblts.rides.copy()
     requests = _inData.sblts.requests.copy()
 
-    opt_outs = False
-    multi_platform_matching = params.get('multi_platform_matching', False)
+    opt_outs = False # flag whether travellers have the option to opt-out
+    multi_platform_matching = params.get('multi_platform_matching', False)  # check matching will ge distributed
+    # over separate platforms
     
     if not multi_platform_matching: # classic matching for single platform
         selected = match(im=rides, r=requests, params=params, plot=plot,
