@@ -5,6 +5,11 @@ import pandas as pd
 import random
 
 
+
+
+
+
+
 def prepare_PoA(inData, CALC_SUBRIDES = False):
     """
     precompute attributes needed for Equilibrium based matching
@@ -79,6 +84,47 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     # compute degrees
     inData.sblts.rides['degree'] = inData.sblts.rides.apply(lambda x: len(x.indexes), axis=1)
+
+
+    # delays
+    inData.sblts.rides['treqs'] = inData.sblts.rides.apply(lambda x: inData.sblts.requests.loc[x.indexes].treq.values,
+                                                           axis=1)
+
+    def calc_deps(r):
+        deps = [r.times[0]]
+        for d in r.times[1:r.degree]:
+            deps.append(deps[-1] + d)  # departure times
+        t = inData.sblts.requests
+        return deps
+
+    inData.sblts.rides['deps'] = inData.sblts.rides.apply(calc_deps, axis=1)
+
+    inData.sblts.rides['delays'] = inData.sblts.rides['deps'] - inData.sblts.rides['treqs']
+
+    inData.sblts.rides['ttravs'] = inData.sblts.rides.apply(lambda r: [sum(r.times[i + 1:r.indexes_orig.index(r.indexes[i]) + r.degree+ 1 + r.indexes_dest.index(r.indexes[i])]) for i in range(r.degree)], axis = 1)
+
+
+    multis = list()
+    for i, ride in inData.sblts.rides.iterrows():
+        for t in ride.indexes:
+            multis.append([ride.name, t])
+    multis = pd.DataFrame(index=pd.MultiIndex.from_tuples(multis))
+
+
+    multis['ride'] = multis.index.get_level_values(0)
+    multis['traveller'] = multis.index.get_level_values(1)
+    multis = multis.join(inData.sblts.requests[['treq', 'dist', 'ttrav']], on='traveller')
+    multis = multis.join(inData.sblts.rides[['u_veh', 'u_paxes','degree', 'indexes', 'ttravs', 'delays']], on='ride')
+    multis['order'] = multis.apply(lambda r: r.indexes.index(r.traveller), axis=1)
+    multis['ttrav_sh'] = multis.apply(lambda r: r.ttravs[r.order], axis=1)
+    multis['delay'] = multis.apply(lambda r: r.delays[r.order], axis=1)
+    #multis['u'] = multis.apply(lambda r: r.u_paxes[r.order], axis=1)
+    multis['shared'] = multis.degree>1
+    multis['ride_time'] = multis.u_veh
+    multis = multis[['ride','traveller','shared', 'degree','treq','ride_time','dist','ttrav','ttrav_sh','delay']]
+    inData.sblts.rides_multi_index = multis
+
+
 
     # possible obj functions to PoA (per ride, not per traveller in ride)
 
@@ -167,6 +213,7 @@ def calc_solution_PoA(inData):
         lambda x: int(inData.sblts.ranking_matrix.loc[x.name][x.ride_id]), axis=1)
     return inData
 
+
 def test_leader_follower(inData,nShuffle = 1):
     ret = dict()
     for i in range(nShuffle):
@@ -178,8 +225,6 @@ def test_leader_follower(inData,nShuffle = 1):
         ret[i] = KPIs(inData)
         inData.logger.info(ret[i])
     return pd.DataFrame(ret)
-
-
 
 
 def leader_follower(inData, shuffle = True, costs = 'ranking_matrix'):
@@ -217,7 +262,6 @@ def leader_follower(inData, shuffle = True, costs = 'ranking_matrix'):
         else:
             inData.logger.info("{} already served".format(i))
     return selected
-
 
 
 def KPIs(inData):
@@ -259,7 +303,6 @@ def test_obj_fun(inData, params, obj = 'u_pax', _plot = False):
     inData = calc_solution_PoA(inData)
 
     return KPIs(inData)
-
 
 
 def brute(inData, log_step=500000):

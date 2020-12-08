@@ -108,12 +108,12 @@ def main(_inData, params, plot=False):
     """
     _inData.logger = init_log(params)  # initialize console logger
 
-    _inData = single_rides(_inData, params) # prepare requests as a potential single rides
-
+    _inData = single_rides(_inData, params)  # prepare requests as a potential single rides
     degree = 1
 
     _inData = pairs(_inData, params, plot=plot)
     degree = 2
+
     _inData.logger.info('Degree {} \tCompleted'.format(degree))
 
     if degree < params.max_degree:
