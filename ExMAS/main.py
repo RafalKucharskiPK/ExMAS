@@ -809,15 +809,17 @@ def matching(_inData, params, plot=False, make_assertion=True):
     
     if not multi_platform_matching: # classic matching for single platform
         selected = match(im=rides, r=requests, params=params, plot=plot,
-                         make_assertion=make_assertion, logger = _inData.logger)
+                         make_assertion=make_assertion, logger = _inData.logger,
+                         mutually_exclusives = _inData.sblts.get('mutually_exclusives', []))
         rides['selected'] = pd.Series(selected)
 
     else:  # matching to multiple platforms
         # select only rides for which all travellers are assigned to this platform
-        rides['platform'] = rides.apply(lambda row: list(set(_inData.sblts.requests.loc[row.indexes].platform.values)),
-                                        axis=1)
+        if params.get('assign_ride_platforms', True):
+            rides['platform'] = rides.apply(lambda row: list(set(_inData.sblts.requests.loc[row.indexes].platform.values)),
+                                            axis=1)
 
-        rides['platform'] = rides.platform.apply(lambda x: -2 if len(x) > 1 else x[0])
+            rides['platform'] = rides.platform.apply(lambda x: -2 if len(x) > 1 else x[0])
         rides['selected'] = 0
 
         opt_outs = -1 in rides.platform.unique() # do we have travellers opting out
@@ -826,7 +828,8 @@ def matching(_inData, params, plot=False, make_assertion=True):
             if platform>=0:
                 platform_rides = rides[rides.platform == platform]
                 selected = match(im=platform_rides, r=requests[requests.platform == platform], params=params,
-                                 plot=plot, make_assertion=False, logger = _inData.logger)
+                                 plot=plot, make_assertion=False, logger = _inData.logger,
+                                 mutually_exclusives=_inData.sblts.get('mutually_exclusives',[]))
 
                 rides['selected'].update(pd.Series(selected))
         
@@ -873,7 +876,7 @@ def matching(_inData, params, plot=False, make_assertion=True):
     return _inData
     
 
-def match(im, r, params, plot=False, make_assertion=True, logger = None):
+def match(im, r, params, plot=False, make_assertion=True, logger = None, mutually_exclusives = []):
     """
     main call of bipartite matching on a graph
     :param im: possible rides
@@ -958,8 +961,14 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     for imr in m:
         j += 1
         prob += pulp.lpSum([imr[i] * variables[i] for i in variables if imr[i] > 0]) == 1, 'c' + str(j)
+    if len(mutually_exclusives)>0:
+        logger.info('Adding {} mutually exlcusive constrains'.format(len(mutually_exclusives)))
+        for exclusive in mutually_exclusives:
+
+            j += 1
+            prob += pulp.lpSum(variables[exclusive[0]]+variables[exclusive[1]])<=1, 'mutually_exclusive' + str(j)
     solver = pulp.get_solver('PULP_CBC_CMD')
-    solver.msg = False
+    solver.msg = params.get('solver_logger',False)
     prob.solve(solver)  # main otpimization call
 
     logger.info('Problem solution: {}. \n'

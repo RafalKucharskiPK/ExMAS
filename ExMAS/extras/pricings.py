@@ -24,11 +24,26 @@ def update_costs(inData, params):
     return inData
 
 def uniform_split(inData):
+    # splits the costs equally among travellers
 
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
 
     rm['uniform_split'] = rm.apply(lambda r: (rm.loc[r.ride,:].cost_user.sum()+r.cost_veh)/r.degree, axis=1)
+
+    inData.sblts.rides_multi_index = rm
+    inData.sblts.rides = rides
+
+    return inData
+
+def residual_split(inData):
+
+    rm = inData.sblts.rides_multi_index
+    rides = inData.sblts.rides
+
+    rides['residual_costs'] = rm.groupby('ride')['price_single'].sum()
+
+    rm['residual_cost'] = rm.apply(lambda r: (rm.loc[r.ride,:].cost_user.sum()+r.cost_veh)/r.degree, axis=1)
 
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides
