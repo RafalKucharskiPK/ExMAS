@@ -124,6 +124,23 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
     multis = multis[['ride','traveller','shared', 'degree','treq','ride_time','dist','ttrav','ttrav_sh','delay']]
     inData.sblts.rides_multi_index = multis
 
+    rides = inData.sblts.rides
+    rides['indexes_set'] = rides.indexes.apply(set)
+
+    def givemesubsets(row):
+        # returns list of all the subgroup indiced contained in a ride
+        return rides[rides.indexes_set.apply(lambda x: x.issubset(row.indexes_set))].index.values
+
+    rides['subgroups'] = rides.apply(givemesubsets, axis=1)
+
+    def givemesupersets(row):
+        # returns list of all the subgroup indiced contained in a ride
+        return rides[rides.indexes_set.apply(lambda x: row.indexes_set.issubset(x))].index.values
+
+    rides['supergroups'] = rides.apply(givemesupersets, axis=1)
+
+    inData.sblts.rides = rides
+
 
 
     # possible obj functions to PoA (per ride, not per traveller in ride)
