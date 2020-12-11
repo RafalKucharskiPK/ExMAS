@@ -1,6 +1,9 @@
 import itertools
+import pandas as pd
+import numpy as np
 
-def algo_TNE(inData, price_column ='uniform_split'):
+
+def algo_TNE(inData, price_column='uniform_split'):
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
     rm['price_single'] = rm.apply(
@@ -10,6 +13,8 @@ def algo_TNE(inData, price_column ='uniform_split'):
     rm['pruned_user'] = (rm[price_column] < rm.price_single) | (rm.shared == False)
     pruned = rm.groupby('ride')['pruned_user'].min().to_frame('pruned')
     pruned['ride'] = pruned.index
+    if 'pruned' in rm.columns:
+        del rm['pruned']
     rides['pruned'] = pruned['pruned']
     rm = rm.join(pruned['pruned'], on='ride')
 
@@ -18,7 +23,8 @@ def algo_TNE(inData, price_column ='uniform_split'):
 
     return inData
 
-def algo_HERMETIC(inData,  price_column ='uniform_split'):
+
+def algo_HERMETIC(inData, price_column='uniform_split'):
     # checks if the groups are hermetic and returns only hermetic ones ('pruned' == True
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
@@ -42,11 +48,11 @@ def algo_HERMETIC(inData,  price_column ='uniform_split'):
             df['surplus'] = df.iloc[:, 0] - df.iloc[:, 1]
             if df.surplus.max() < 0:
                 hermetic = False
-                inData.logger.info('non-hermetic group '+str(G))
+                inData.logger.info('non-hermetic group ' + str(G))
                 break
         return hermetic
 
-    rides['hermetic'] = rides.apply(hermetic,axis = 1)
+    rides['hermetic'] = rides.apply(hermetic, axis=1)
     rides['pruned'] = rides['hermetic']
 
     inData.sblts.rides_multi_index = rm
@@ -55,7 +61,7 @@ def algo_HERMETIC(inData,  price_column ='uniform_split'):
     return inData
 
 
-def algo_RUE(inData, price_column ='uniform_split'):
+def algo_RUE(inData, price_column='uniform_split'):
     # deterimnes set of mergeable groups
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
@@ -63,8 +69,6 @@ def algo_RUE(inData, price_column ='uniform_split'):
     rsuffix = '_G'
     mergeable = list()
     indexes_set = rides.indexes_set
-
-
 
     for i in rides.index:
         ride = rides.loc[i]
@@ -118,6 +122,10 @@ def algo_RSIE(inData, price_column='uniform_split', _print=False):
         return False
 
     for G2 in rides.index:  # loop over ride
+        if G2 % 20 == 0:
+            inData.logger.warning('Searching unstable pairs {}/{}. {} found so far'.format(G2,
+                                                                                           inData.sblts.rides.shape[0],
+                                                                                           len(unstables)))
         G2s = indexes_set[G2]  # travellers in G2
         costs_of_G2 = rm.loc[G2, :][['traveller', price_column]]  # costs of group G2 before joining
         for G1 in rides.index:  # pairs
@@ -130,3 +138,26 @@ def algo_RSIE(inData, price_column='uniform_split', _print=False):
     return inData
 
 
+def algo_TSE(inData, price_column='uniform_split'):
+    rm = inData.sblts.rides_multi_index
+    rides = inData.sblts.rides
+    selected = list()  # list of selected rides
+    rides['TNE_efficiency'] = rm.groupby('ride')[price_column].max()
+
+    assigned = list()
+    while len(assigned) < inData.sblts.requests.shape[0]:
+        best = np.nanargmin(rides['TNE_efficiency'])  # select best remaining option
+
+        selected += [best]  # add this ride to solution
+        followers = rm.loc[best, :].index
+        rides_to_remove = rm.loc[pd.IndexSlice[:, followers], :].ride.unique()
+        rides.TNE_efficiency = rides.apply(lambda x: np.inf if x.name in rides_to_remove else x.TNE_efficiency, axis=1)
+
+        assigned = assigned + list(followers.values)
+        assigned.sort()
+
+    inData.sblts.rides.selected = inData.sblts.rides.apply(lambda x: 1 if x.name in selected else 0, axis=1)
+    inData.sblts.schedule = inData.sblts.rides[inData.sblts.rides.selected == 1].copy()
+
+
+    return inData

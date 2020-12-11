@@ -103,6 +103,7 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     inData.sblts.rides['ttravs'] = inData.sblts.rides.apply(lambda r: [sum(r.times[i + 1:r.indexes_orig.index(r.indexes[i]) + r.degree+ 1 + r.indexes_dest.index(r.indexes[i])]) for i in range(r.degree)], axis = 1)
 
+    inData.sblts.rides['pruned'] = True
 
     multis = list()
     for i, ride in inData.sblts.rides.iterrows():
