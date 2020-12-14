@@ -5,7 +5,7 @@ import ExMAS.main
 import ExMAS.utils
 
 import pandas as pd
-EXPERIMENT_NAME = 'PIPE'
+EXPERIMENT_NAME = 'TEST'
 
 
 def prep(params_path = '../../ExMAS/spinoffs/game/pipe.json'):
@@ -35,7 +35,7 @@ def prep(params_path = '../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 300
+    params.nP = 50
     params.shared_discount = 0.2
 
     # prepare ExMAS
@@ -44,8 +44,7 @@ def prep(params_path = '../../ExMAS/spinoffs/game/pipe.json'):
     return inData, params
 
 def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
-                objs = ['u_veh','u_pax'],
-                minmax = ['min','max'],
+                minmax = ('min','max'),
                 store_res = True):
 
     #clear
@@ -60,7 +59,7 @@ def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
     inData.sblts.requests['platform'] = 1
     inData.requests['platform'] = inData.requests.apply(lambda x: [1], axis=1)
     if ALGO == 'TSE':
-        params.matching_obj = 'u_pax'
+        params.matching_obj = PRICING
         params.minmax = 'min'
         res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
         inData = evaluate_shareability(inData, params)
@@ -78,7 +77,7 @@ def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
         return inData
 
 
-    for params.matching_obj in objs:  # two objective functions
+    for params.matching_obj in [PRICING]:  # two objective functions
         for params.minmax in minmax:  # best and worst prices of anarchy
             res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
             inData.logger.warning(res_name)
@@ -107,7 +106,7 @@ def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):
     params.matching_obj = 'u_veh'
     windows = timewindow_benchmark.ExMAS_windows(inData, params)
 
-    for params.matching_obj in ['u_veh', 'u_pax']:  # two objective functions
+    for params.matching_obj in ['u_veh']:  # two objective functions
         for params.minmax in ['min', 'max']:  # best and worst prices of anarchy
             res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
             inData.logger.warning(res_name)
@@ -170,33 +169,35 @@ def pipe():
     inData.results.rm = inData.sblts.rides_multi_index.copy()
     inData.results.KPIs = dict()
 
-    PRICING = 'none'  # start with basic ExMAS
+    PRICING = 'u_veh'  # start with basic ExMAS
     ALGO = 'EXMAS'
 
-    inData = single_eval(inData, params, None, PRICING, ALGO, objs = ['costs_veh','costs_user'])
-
-
+    inData = single_eval(inData, params, None, PRICING, ALGO)
 
     params.multi_platform_matching = True
     params.assign_ride_platforms = False
-    PRICING = 'uniform_split'
 
 
-    ALGOS=dict()
-
+    ALGOS=dict() # algorithms to apply and their names
     ALGOS['TSE'] = prunings.algo_TSE
     ALGOS['TNE'] = prunings.algo_TNE
     ALGOS['HERMETIC'] = prunings.algo_HERMETIC
     ALGOS['RUE'] = prunings.algo_RUE
     ALGOS['RSIE'] = prunings.algo_RSIE
 
-    inData = pricings.uniform_split(inData)  # apply pricing strategy
+    PRICINGS = dict() # pricings to apply and their names
+    PRICINGS['UNIFORM'] = pricings.uniform_split
+    PRICINGS['EXTERNALITY'] = pricings.externality_split
+    PRICINGS['RESIDUAL'] = pricings.residual_split
+    PRICINGS['SUBGROUP'] = pricings.subgroup_split      
 
-    for ALGO, algorithm in ALGOS.items():
-
-        inData = single_eval(inData, params, algorithm, PRICING, ALGO, objs = ['costs_veh','costs_user'])
+    for PRICING, pricing in PRICINGS.items():
+        inData = pricing(inData)  # apply pricing strategy
+        for ALGO, algorithm in ALGOS.items():
+            inData = single_eval(inData, params, algorithm, PRICING, ALGO)
 
     ALGO = 'WINDOWS'
+    PRICING =  'EXMAS'
     inData = single_eval_windows(inData, params, None, PRICING, ALGO)
 
     inData = process_results(inData)

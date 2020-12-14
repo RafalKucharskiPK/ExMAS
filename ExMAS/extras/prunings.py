@@ -1,25 +1,43 @@
+"""
+# ExMAS
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+---
+
+Pruning algorithms to filter feasible shared rides into the one fitting into a give notion of equilibrium
+Used in the game-theoretical study of the paper ....
+
+----
+Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
+"""
+
+
 import itertools
 import pandas as pd
 import numpy as np
 
 
-def algo_TNE(inData, price_column='uniform_split'):
-    rm = inData.sblts.rides_multi_index
-    rides = inData.sblts.rides
+def algo_TNE(inData, price_column='UNIFORM'):
+    # prunes the rides to only those whose costs are lower than for single ride for all travellers
+
+    rm = inData.sblts.rides_multi_index  # ride (group) - traveller data
+    rides = inData.sblts.rides  # rides data
+
+    # see the price of single ride for each ride
     rm['price_single'] = rm.apply(
         lambda r: rm[(rm.traveller == r.traveller) & (rm.shared == False)][price_column].max(), axis=1)
 
-    rm['surplus'] = rm.price_single - rm[price_column]
-    rm['pruned_user'] = (rm[price_column] < rm.price_single) | (rm.shared == False)
-    pruned = rm.groupby('ride')['pruned_user'].min().to_frame('pruned')
-    pruned['ride'] = pruned.index
+    rm['surplus'] = rm.price_single - rm[price_column] # difference between single and shared
+    rm['pruned_user'] = (rm[price_column] < rm.price_single) | (rm.shared == False) # filter to those which are not
+    # shared or lower cost than single
+    pruned = rm.groupby('ride')['pruned_user'].min().to_frame('pruned')  # ride is pruned if all travellers meet above
+    pruned['ride'] = pruned.index  # update data
     if 'pruned' in rm.columns:
         del rm['pruned']
-    rides['pruned'] = pruned['pruned']
-    rm = rm.join(pruned['pruned'], on='ride')
+    rides['pruned'] = pruned['pruned']  # this will be used as a filter in pruning
+    rm = rm.join(pruned['pruned'], on='ride')  # store data about pruned ride-traveller pairs
 
-    inData.sblts.rides_multi_index = rm
-    inData.sblts.rides = rides
+    inData.sblts.rides_multi_index = rm  # store back
+    inData.sblts.rides = rides  #          tables
 
     return inData
 
@@ -28,14 +46,6 @@ def algo_HERMETIC(inData, price_column='uniform_split'):
     # checks if the groups are hermetic and returns only hermetic ones ('pruned' == True
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
-
-    # rides['indexes_set'] = rides.indexes.apply(set)  # moved to prapare_PoA
-    #
-    # def givemesubsets(row):
-    #     # returns list of all the subgroup indiced contained in a ride
-    #     return rides[rides.indexes_set.apply(lambda x: x.issubset(row.indexes))].index.values
-    #
-    # rides['subgroups'] = rides.apply(givemesubsets, axis=1)
 
     def hermetic(ride):
         #
