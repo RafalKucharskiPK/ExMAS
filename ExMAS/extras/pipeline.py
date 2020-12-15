@@ -5,15 +5,17 @@ import ExMAS.main
 import ExMAS.utils
 
 import pandas as pd
-EXPERIMENT_NAME = 'TEST'
+EXPERIMENT_NAME = 'Test_300'
 
 
-def prep(params_path = '../../ExMAS/spinoffs/game/pipe.json'):
+def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
 
     params = ExMAS.utils.get_config(params_path, root_path = '../../')  # load the default
     params.t0 = pd.to_datetime(params.t0)
     params.logger_level = 'WARNING'
     params.matching_obj = 'u_veh'
+
+    # parameterization
     params.veh_cost = 1.3 * params.VoT / params.avg_speed  # operating costs per kilometer
     params.fixed_ride_cost = 0.3  # ride fixed costs (per vehicle)
     params.time_cost = params.VoT  # travellers' cost per travel time
@@ -35,13 +37,14 @@ def prep(params_path = '../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 50
+    params.nP = 300
     params.shared_discount = 0.2
 
     # prepare ExMAS
     inData = ExMAS.utils.generate_demand(inData, params)  # generate requests
 
     return inData, params
+
 
 def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
                 minmax = ('min','max'),
@@ -50,53 +53,47 @@ def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
     #clear
     inData.sblts.rides['pruned'] = True
     inData.sblts.mutually_exclusives = []
+
+    # pruning
     if pruning_algorithm is not None:
         inData = pruning_algorithm(inData, price_column=PRICING)  # apply pruning strategy
+
     inData.logger.warn('Pruned nRides {}/{}'.format(inData.sblts.rides[inData.sblts.rides.pruned == True].shape[0],
                                              inData.sblts.rides.shape[0]))
+
+    # set pruned to boolean flaga for matching
     inData.sblts.rides['platform'] = inData.sblts.rides.pruned.apply(
         lambda x: 1 if x else -1)  # use only pruned in the
     inData.sblts.requests['platform'] = 1
     inData.requests['platform'] = inData.requests.apply(lambda x: [1], axis=1)
-    if ALGO == 'TSE':
+    if ALGO == 'TSE':  # special case of TSE, there is no WPoA, BPoA, just algorithm
         params.matching_obj = PRICING
         params.minmax = 'min'
         res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
-        inData = evaluate_shareability(inData, params)
-        if store_res:
+        inData = evaluate_shareability(inData, params)  # get KPIs of ExMAS
+    else:
+        for params.matching_obj in [PRICING]:  # two objective functions
+            for params.minmax in minmax:  # best and worst prices of anarchy
+                res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
+                inData.logger.warning(res_name)
+                inData = matching(inData, params, make_assertion=False)  # < - main matching
+                inData = evaluate_shareability(inData, params)
 
-            inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
-            inData.sblts.rides.selected.name = res_name
-            inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
-                                                       on='ride')  # stor selected rides in the multiindex table
-            inData.sblts.res['pricing'] = PRICING
-            inData.sblts.res['algo'] = ALGO
-            inData.sblts.res['minmax'] = params.minmax
-            inData.sblts.res['obj'] = params.matching_obj
-            inData.results.KPIs[res_name] = inData.sblts.res
-        return inData
-
-
-    for params.matching_obj in [PRICING]:  # two objective functions
-        for params.minmax in minmax:  # best and worst prices of anarchy
-            res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
-            inData.logger.warning(res_name)
-            inData = matching(inData, params, make_assertion=False)  # < - main matching
-            inData = evaluate_shareability(inData, params)
-            if store_res:
-                inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
-                inData.sblts.rides.selected.name = res_name
-                inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
-                                                           on='ride')  # stor selected rides in the multiindex table
-                inData.sblts.res['pricing'] = PRICING
-                inData.sblts.res['algo'] = ALGO
-                inData.sblts.res['minmax'] = params.minmax
-                inData.sblts.res['obj'] = params.matching_obj
-                inData.results.KPIs[res_name] = inData.sblts.res
+    if store_res:
+        inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
+        inData.sblts.rides.selected.name = res_name
+        inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
+                                                   on='ride')  # store selected rides in the multiindex table
+        inData.sblts.res['pricing'] = PRICING  # columns for KPIs table
+        inData.sblts.res['algo'] = ALGO
+        inData.sblts.res['minmax'] = params.minmax
+        inData.sblts.res['obj'] = params.matching_obj
+        inData.results.KPIs[res_name] = inData.sblts.res  # stack columns with results
     return inData
 
 
-def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):
+def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):  # evaluate windows-based approach
+    # this has to be called last, since it screws the inData.sblts.rides
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
 
@@ -112,10 +109,6 @@ def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):
             inData.logger.warning(res_name)
             windows = matching(windows, params, make_assertion=False)  # < - main matching
             windows = evaluate_shareability(windows, params)
-            #inData.results.rides[res_name] = windows.sblts.rides.selected.values  # store results (selected rides)
-            #windows.sblts.rides.selected.name = res_name
-            #inData.results.rm = inData.results.rm.join(windows.sblts.rides.selected,
-            #                                           on='ride')  # stor selected rides in the multiindex table
             windows.sblts.res['pricing'] = PRICING
             windows.sblts.res['algo'] = ALGO
             windows.sblts.res['minmax'] = params.minmax
@@ -123,7 +116,9 @@ def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):
             inData.results.KPIs[res_name] = windows.sblts.res
     return inData
 
+
 def process_results(inData):
+    # called at the end of pipeline to wrap-up the results
     ret_veh = dict()
     for col in inData.results.rides.columns:
         if '-' in col:
@@ -148,14 +143,12 @@ def process_results(inData):
     inData.results.rides.to_csv(EXPERIMENT_NAME + '_rides.csv')
     inData.results.rm.to_csv(EXPERIMENT_NAME + '_rm.csv')
 
-
     return inData
 
 
 def pipe():
 
     inData, params = prep()
-
 
     # clear
     inData.sblts.mutually_exclusives = []
@@ -203,6 +196,7 @@ def pipe():
     inData = process_results(inData)
 
     return inData
+
 
 if __name__ == '__main__':
     pipe()

@@ -79,7 +79,6 @@ def algo_RUE(inData, price_column='uniform_split'):
     rsuffix = '_G'
     mergeable = list()
     indexes_set = rides.indexes_set
-
     for i in rides.index:
         ride = rides.loc[i]
         subgroups = ride.subgroups

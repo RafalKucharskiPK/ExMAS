@@ -33,7 +33,7 @@ def update_costs(inData, params):
     rm['cost_user'] = params.time_cost * rm.ttrav_sh + \
                          params.wait_cost * abs(rm.delay) + \
                          params.sharing_penalty_fixed * rm.shared + \
-                         params.sharing_penalty_multiplier * rm.shared * rm.ttrav_sh
+                         params.sharing_penalty_multiplier * params.time_cost * rm.shared * rm.ttrav_sh
 
     rides['costs_user'] = rm.groupby('ride').sum()['cost_user']  # sum user costs for a ride
     rides['costs_veh'] = rm.groupby('ride').max()['cost_veh']  # assign vehicle costs for rides
@@ -94,7 +94,7 @@ def externality_split(inData):
                         # (if lower than current)
             price = r.total_group_cost - price  # eq. 25
         else:
-            price = 0  # for non-shared groups the price is null
+            price = r.total_group_cost - 0  # for empty groups the price is null
         return price
 
     rm = inData.sblts.rides_multi_index
@@ -129,6 +129,43 @@ def residual_split(inData):
 
 
 def subgroup_split(inData):
+    def get_subgroup_price(r):
+        indexes = r.indexes_set
+        subgroups = r.subgroups
+        subgroup_indexes = rides.loc[subgroups][['indexes_set']]
+
+        prices = dict()
+        while len(indexes) > 0:
+            effs = rides.loc[subgroups].cost_efficiency
+            J = effs.idxmin()
+            z = effs.min()
+            indexes = indexes - rides.loc[J].indexes_set
+            subgroup_indexes = rides.loc[subgroups][['indexes_set']]
+            subgroup_indexes['f'] = subgroup_indexes.apply(
+                lambda x: len(rides.loc[J].indexes_set.intersection(x.indexes_set)) == 0, axis=1)
+            subgroups = subgroup_indexes[subgroup_indexes.f].index
+
+            for i in rides.loc[J].indexes_set:
+                prices[i] = z
+        return prices
+
+    rm = inData.sblts.rides_multi_index
+    rides = inData.sblts.rides
+    prices = dict()
+    for i, r in rides.iterrows():
+        prices.update(get_subgroup_price(r))
+
+    rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis=1)
+
+    rides['SUBGROUP'] = rm.groupby('ride').sum()['SUBGROUP']
+
+    inData.sblts.rides_multi_index = rm
+    inData.sblts.rides = rides
+
+    return inData
+
+
+def subgroup_split_bas(inData):
     # determines groups of lower costs and assigns costs based on alternatives
     # algorithm 7
 
@@ -141,16 +178,18 @@ def subgroup_split(inData):
         prices = dict()  # return dict to populat
         while len(indexes_set) > 0:  # until everyone is assigned
             effs = rides.loc[subgroups].cost_efficiency  # see the efficiencies of remaining subgroups
-            J, z = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
+            J, z  = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
             for i in rides.loc[J].indexes_set:
                 prices[i] = z # assign the prices
 
             indexes_set = indexes_set - rides.loc[J].indexes_set  # remove those from the best group
+            subgroup_indexes = rides.loc[subgroups][['indexes_set']]
             subgroup_indexes['f'] = subgroup_indexes.apply(
                 lambda x: len(rides.loc[J].indexes_set.intersection(x.indexes_set)) == 0, axis=1) # update which
             # subgroups remain assignable
             subgroups = subgroup_indexes[subgroup_indexes.f].index  # filter to those not assigned
             # loop and assign the ones who are not assigned left
+
         return prices
 
     rm = inData.sblts.rides_multi_index
