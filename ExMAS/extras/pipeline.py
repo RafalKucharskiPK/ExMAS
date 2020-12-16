@@ -5,7 +5,7 @@ import ExMAS.main
 import ExMAS.utils
 
 import pandas as pd
-EXPERIMENT_NAME = 'Test_300'
+EXPERIMENT_NAME = 'many'
 
 
 def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
@@ -39,6 +39,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.assign_ride_platforms = True
     params.nP = 300
     params.shared_discount = 0.2
+    params.simTime = 0.1
 
     # prepare ExMAS
     inData = ExMAS.utils.generate_demand(inData, params)  # generate requests
@@ -46,49 +47,41 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     return inData, params
 
 
-def single_eval(inData, params, pruning_algorithm, PRICING, ALGO,
+def single_eval(inData, params, MATCHING_OBJS, PRUNINGS, PRICING,
                 minmax = ('min','max'),
                 store_res = True):
 
-    #clear
-    inData.sblts.rides['pruned'] = True
-    inData.sblts.mutually_exclusives = []
+    inData = prunings.determine_prunings(inData, PRUNINGS) #
 
-    # pruning
-    if pruning_algorithm is not None:
-        inData = pruning_algorithm(inData, price_column=PRICING)  # apply pruning strategy
 
-    inData.logger.warn('Pruned nRides {}/{}'.format(inData.sblts.rides[inData.sblts.rides.pruned == True].shape[0],
-                                             inData.sblts.rides.shape[0]))
 
-    # set pruned to boolean flaga for matching
+    # set pruned to boolean flag for matching
     inData.sblts.rides['platform'] = inData.sblts.rides.pruned.apply(
         lambda x: 1 if x else -1)  # use only pruned in the
     inData.sblts.requests['platform'] = 1
     inData.requests['platform'] = inData.requests.apply(lambda x: [1], axis=1)
-    if ALGO == 'TSE':  # special case of TSE, there is no WPoA, BPoA, just algorithm
-        params.matching_obj = PRICING
-        params.minmax = 'min'
-        res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
-        inData = evaluate_shareability(inData, params)  # get KPIs of ExMAS
-    else:
-        for params.matching_obj in [PRICING]:  # two objective functions
-            for params.minmax in minmax:  # best and worst prices of anarchy
-                res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
-                inData.logger.warning(res_name)
-                inData = matching(inData, params, make_assertion=False)  # < - main matching
-                inData = evaluate_shareability(inData, params)
 
-    if store_res:
-        inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
-        inData.sblts.rides.selected.name = res_name
-        inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
-                                                   on='ride')  # store selected rides in the multiindex table
-        inData.sblts.res['pricing'] = PRICING  # columns for KPIs table
-        inData.sblts.res['algo'] = ALGO
-        inData.sblts.res['minmax'] = params.minmax
-        inData.sblts.res['obj'] = params.matching_obj
-        inData.results.KPIs[res_name] = inData.sblts.res  # stack columns with results
+    for params.matching_obj in MATCHING_OBJS:  # two objective functions
+        for params.minmax in minmax:  # best and worst prices of anarchy
+            res_name = '{}-{}-{}-{}-{}'.format(PRICING, MATCHING_OBJS, PRUNINGS, params.matching_obj, params.minmax)  # name of experiment
+            inData.logger.warning(res_name)
+            if 'TSE' not in PRUNINGS:
+                inData = matching(inData, params, make_assertion=False)  # < - main matching
+            else:
+                inData = prunings.algo_TSE(inData, params.matching_obj)
+
+            inData = evaluate_shareability(inData, params)
+
+            if store_res:
+                inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
+                inData.sblts.rides.selected.name = res_name
+                inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
+                                                           on='ride')  # store selected rides in the multiindex table
+                inData.sblts.res['pricing'] =str(MATCHING_OBJS)  # columns for KPIs table
+                inData.sblts.res['algo'] = str(PRUNINGS)
+                inData.sblts.res['minmax'] = params.minmax
+                inData.sblts.res['obj'] = params.matching_obj
+                inData.results.KPIs[res_name] = inData.sblts.res  # stack columns with results
     return inData
 
 
@@ -164,19 +157,22 @@ def pipe():
 
     PRICING = 'u_veh'  # start with basic ExMAS
     ALGO = 'EXMAS'
-
-    inData = single_eval(inData, params, None, PRICING, ALGO)
+    inData = single_eval(inData, params,
+                         MATCHING_OBJS=['u_veh'],  # this can be more
+                         PRUNINGS=[],  # and this can be more
+                         PRICING='EXMAS')
+    #inData = single_eval(inData, params, None, PRICING, ALGO)
 
     params.multi_platform_matching = True
     params.assign_ride_platforms = False
 
 
     ALGOS=dict() # algorithms to apply and their names
-    ALGOS['TSE'] = prunings.algo_TSE
     ALGOS['TNE'] = prunings.algo_TNE
     ALGOS['HERMETIC'] = prunings.algo_HERMETIC
     ALGOS['RUE'] = prunings.algo_RUE
     ALGOS['RSIE'] = prunings.algo_RSIE
+    ALGOS['TSE'] = prunings.algo_TSE
 
     PRICINGS = dict() # pricings to apply and their names
     PRICINGS['UNIFORM'] = pricings.uniform_split
@@ -187,7 +183,13 @@ def pipe():
     for PRICING, pricing in PRICINGS.items():
         inData = pricing(inData)  # apply pricing strategy
         for ALGO, algorithm in ALGOS.items():
-            inData = single_eval(inData, params, algorithm, PRICING, ALGO)
+            inData = algorithm(inData, price_column=PRICING)  # apply pruning strategies for a given pricing strategy
+        for ALGO, algorithm in ALGOS.items():  # perform assignment for single prunings
+            inData = single_eval(inData, params,
+                                 MATCHING_OBJS = [PRICING],  # this can be more
+                                 PRUNINGS = [ALGO],  # and this can be more
+                                 PRICING = PRICING,  # this is taken from first level loop
+                                 minmax = ('min','max'))  # direction BPoA, WPoA
 
     ALGO = 'WINDOWS'
     PRICING =  'EXMAS'
