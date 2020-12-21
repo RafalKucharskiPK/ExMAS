@@ -80,16 +80,20 @@ def exploit_search_space(one_slice, *args):
         else:
             _params[key] = val
     inData.stats = ExMAS.utils.networkstats(inData)
-    inData = ExMAS.utils.generate_demand(inData, params)
+    #inData = ExMAS.utils.generate_demand(inData, params)
+    inData = ExMAS.utils.load_albatross_csv(inData, params, sample=True)
     t0 = pd.Timestamp.now()
     inData = ExMAS.main(inData, _params, plot=False)
 
     stamp['dt'] = str(pd.Timestamp.now() - t0)
     stamp['search_space'] = inData.sblts.rides.shape[0]
     ret = pd.concat([inData.sblts.res, pd.Series(stamp)])
-
+    rides = inData.sblts.rides
+    reqs  = inData.sblts.requests
     filename = "".join([c for c in str(stamp) if c.isalpha() or c.isdigit() or c == ' ']).rstrip().replace(" ", "_")
-    ret.to_frame().to_csv(os.path.join('ExMAS/data/results', filename + '.csv'))
+    ret.to_frame().to_csv(os.path.join('ExMAS/data/results2/res', filename + '-res.csv'))
+    rides.to_csv(os.path.join('ExMAS/data/results2/rides', filename + '-ride.csv'))
+    reqs.to_csv(os.path.join('ExMAS/data/results2/requests', filename + '-req.csv'))
     print(filename, pd.Timestamp.now(), 'done')
     return 0
 
@@ -110,7 +114,7 @@ def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-
     :return: set of csvs in 'data/results`
     """
     inData = mData
-    os.chdir("C:/Users/sup-rkucharski/PycharmProjects/ExMAS")
+    os.chdir(r'C:\Users\mmari\Desktop\MARKO STUFF\UNI\MSc\2nd Transport & Planning\Thesis\Project\ExMAS')
 
     params = ExMAS.utils.get_config(config)
     params.logger_level = logger_level
