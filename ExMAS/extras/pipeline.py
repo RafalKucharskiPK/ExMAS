@@ -186,7 +186,7 @@ def pipe():
             inData = algorithm(inData, price_column=PRICING)  # apply pruning strategies for a given pricing strategy
         for ALGO, algorithm in ALGOS.items():  # perform assignment for single prunings
             inData = single_eval(inData, params,
-                                 MATCHING_OBJS = [PRICING],  # this can be more
+                                 MATCHING_OBJS = ['total_group_cost'],  # this can be more
                                  PRUNINGS = [ALGO],  # and this can be more
                                  PRICING = PRICING,  # this is taken from first level loop
                                  minmax = ('min','max'))  # direction BPoA, WPoA

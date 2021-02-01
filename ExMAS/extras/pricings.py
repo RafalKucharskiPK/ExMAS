@@ -116,9 +116,12 @@ def residual_split(inData):
     rides = inData.sblts.rides
 
     # it uses residual of rides as computed in update_costs
-    rm['RESIDUAL'] = rm.apply(lambda x: x.residual_user * x.cost_user / rides.loc[x.ride].costs_user.sum(),axis = 1)
+    jjii
+    rm['RESIDUAL'] = rm.apply(lambda x: x.residual_user * x.cost_user / rides.loc[x.ride].costs_user.sum() + x.cost_single,axis = 1)
     # and splits it proportionally to costs_users
     rides['RESIDUAL'] = rides['residual']  # this will be objective fun in matching
+
+    # to do this shall be p_i + c_i(single)
 
 
 
