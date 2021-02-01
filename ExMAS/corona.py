@@ -21,7 +21,7 @@ from dotmap import DotMap
 from ExMAS.main import init_log
 import matplotlib.pyplot as plt
 from ExMAS.utils import get_config
-from ExMAS.main import matching
+from ExMAS.main import matching, evaluate_shareability
 
 import math
 import osmnx as ox
@@ -161,9 +161,28 @@ def evolve(inData, params, _print=False, _plot=False):
         # redo matching
         inData = matching(inData, params, _print)
 
+        #output KPIs
+        retout = inData.passengers.groupby('state').size()
+        r = inData.sblts.requests
+
+        schedule = inData.sblts.schedule
+        schedule['ttrav'] = schedule.apply(lambda x: sum(x.times[1:]), axis=1)
+
+        retout['VehHourTrav'] = schedule.ttrav.sum()
+        retout['VehHourTrav_ns'] = r.ttrav.sum()
+
+        retout['PassHourTrav'] = r.ttrav_sh.sum()
+        retout['PassHourTrav_ns'] = r.ttrav.sum()
+
+        retout['PassUtility'] = r.u_sh.sum()
+        retout['PassUtility_ns'] = r.u.sum()
+        retout['nRides'] = schedule.shape[0]
+
+
+
         # and infect
         inData = infect(inData, day, params)
-        ret[day] = inData.passengers.groupby('state').size()
+        ret[day] = retout
         inData.logger.info(ret[day])
         inData.logger.info('Day: {}\t infected: {}\t quarantined: '
                            '{}\t recovered: {} \t susceptible: {}, active today: {}.'.format(day,
@@ -183,6 +202,8 @@ def evolve(inData, params, _print=False, _plot=False):
                                                                                 inData.passengers.active_today == True].shape[
                                                                                 0]))
         # go to next day (if still anyone is infected)
+        if day > params.corona.get('max_days',99999): # early exit
+            break
 
     # end of the loop
     inData.report = pd.DataFrame(ret)
@@ -193,7 +214,8 @@ def evolve(inData, params, _print=False, _plot=False):
     if params.get('report', False): # store results to csvs
         replication_id = random.randint(0, 100000)
         ret = inData.report.T.fillna(0)
-        filename = "nP-{}_init-{}_p-{}_quarantine-{}_recovery-{}_repl-{}.csv".format(
+        filename = "experiment-{}_nP-{}_init-{}_p-{}_quarantine-{}_recovery-{}_repl-{}.csv".format(
+            params.corona.EXPERIMENT_NAME,
             params.nP * params.corona.participation,
             params.corona.initial_share,
             params.corona.p,
@@ -458,24 +480,36 @@ def degrees(replications = 10):
     pd.DataFrame(ret).to_csv('degrees.csv')
 
 
-def corona_run(workers=8, replications=10, search_space=None, test=False, prep=True, brute=True):
+def corona_run(workers=8, replications=10, search_space=None, test=False, prep=True, brute=True,
+               params_path = 'ExMAS/data/configs/corona.json'):
+    params = get_config(params_path)
     if test:
         search_space = DotMap()
-        search_space.initial_share = [0.001]
-        search_space.p = [1]
+        search_space.initial_share = [0.002]
+        search_space.p = [0.65]
     else:
 
         if search_space is None:
             search_space = DotMap()
-            search_space.initial_share = [0.001, 0.002, 0.005, 0.01]
-            search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
+            if params.corona.EXPERIMENT_NAME == "EFFICIENCY":
+                search_space.initial_share = [0.005]
+                search_space.p = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 1]
+            elif params.corona.EXPERIMENT_NAME== "SCALING":
+                search_space.initial_share = [0.005]
+                search_space.p = [0.95]
+                search_space.participation = [0.95, 0.9, 0.85, 0.8, 0.75,
+                                              0.7, 0.65, 0.6, 0.55,
+                                              0.5, 0.45, 0.4, 0.35,
+                                              0.3, 0.25, 0.2, 0.15,
+                                              0.1]
 
     from ExMAS.utils import inData as inData
-    params = get_config('ExMAS/data/configs/corona.json')
+
     params = ExMAS.utils.make_paths(params)
     params.logger_level = 'INFO'
     params.nP = 3200
-    params.corona.participation = 2000 / 3200
+    if params.corona.EXPERIMENT_NAME != 'SCALING':
+        params.corona.participation = 2000 / 3200
     params.shared_discount = 0.2
     #params.corona.p = 1
     #params.corona.initial_share = 0.001
@@ -500,6 +534,14 @@ def corona_run(workers=8, replications=10, search_space=None, test=False, prep=T
 
 
 if __name__ == "__main__":
-    corona_run(workers=2, replications=10, prep=False, test=False, brute=True)
+
+    # corona_run(workers=1, replications=1, prep=False, test=False, brute=True,
+    #             params_path='ExMAS/data/configs/corona_EFFICIENCY.json')
+
+    for _ in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        corona_run(workers=1, replications=1, prep=False, test=False, brute=True,
+                   params_path='ExMAS/data/configs/corona_SCALING.json')
+
+
 
 
