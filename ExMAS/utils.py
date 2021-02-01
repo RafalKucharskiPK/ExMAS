@@ -409,11 +409,15 @@ def requests_to_geopandas(inData, filename=None):
 def synthetic_demand_poly(_inData, _params=None):
     from random import seed
     from scipy.stats import gamma as gamma_random
-    print(os.getcwd())
+
+
+    if _params.gammdist_shape == 0:
+        _params.gammdist_shape = 1
+        _params.gammdist_scale = 330
 
     origins_albatross = pd.read_csv('ExMAS/spinoffs/potential/AM_origins.csv', index_col=0)
     origins_albatross = origins_albatross[
-        origins_albatross['origin'].isin(inData.skim.index)]  # droping those origins not in skim
+        origins_albatross['origin'].isin(_inData.skim.index)]  # droping those origins not in skim
 
     # Sample_origins = origins_albatross.sample(params.nP)
     # Sample_origins.to_csv('Sample_origins.csv')
@@ -463,6 +467,7 @@ def synthetic_demand_poly(_inData, _params=None):
         _distances.index = index_id
         _distances['fact'] = total / _distances['cant']
         _distances['p_destination_fixed'] = _distances['p_destination'] * _distances['fact']
+        _distances['p_destination_fixed'] = _distances['p_destination_fixed'].replace(np.inf, 0).max()
 
         Dist.append(_distances)
 

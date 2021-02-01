@@ -28,8 +28,8 @@ def search_space_requests():
     space = DotMap()
     space.nP = [500,1000,2000]
     space.nCenters = [1, 2, 3, 4]
-    space.gammdist_shape = [1, 1.5, 2, 2.5, 4, 6]
-    space.gamma_imp_shape = [1, 1.15, 2, 3, 4]
+    space.gammdist_shape = [1.5, 2, 2.5, 4, 6]
+    space.gamma_imp_shape = [1, 1.15, 2, 3]
     space.replication = list(range(1,11))
     return space
 
@@ -99,13 +99,13 @@ os.chdir(os.path.join(cwd,'../../..'))
 
 
 
-# ExMAS.experiments.experiment(workers  = 1,
-#                                space = search_space_requests(),
-#                                config = "ExMAS/data/configs/potential.json",
-#                                func = create_demand)
-#
-ExMAS.experiments.experiment(workers = 1,
-                             space = search_space_csvs(),
-                             config = "ExMAS/data/configs/potential.json",
-                             func = exploit_csvs,
-                             logger_level= 'WARNING')
+ExMAS.experiments.experiment(workers  = 1,
+                                space = search_space_requests(),
+                                config = "ExMAS/data/configs/potential.json",
+                                func = create_demand)
+
+# ExMAS.experiments.experiment(workers = 1,
+#                              space = search_space_csvs(),
+#                              config = "ExMAS/data/configs/potential.json",
+#                              func = exploit_csvs,
+#                              logger_level= 'WARNING')
