@@ -17,14 +17,12 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
 
     # parameterization
     params.veh_cost = 1.3 * params.VoT / params.avg_speed  # operating costs per kilometer
-    params.fixed_ride_cost = 0.3  # ride fixed costs (per vehicle)
+    params.fixed_ride_cost = 1  # ride fixed costs (per vehicle)
     params.time_cost = params.VoT  # travellers' cost per travel time
     params.wait_cost = params.time_cost * 1.5  # and waiting
     params.sharing_penalty_fixed = 0  # fixed penalty (EUR) per
     params.sharing_penalty_multiplier = 0  # fixed penalty (EUR) per
-    params.minmax = 'min'
-    params.multi_platform_matching = False
-    params.assign_ride_platforms = True
+
 
     params.max_detour = 120  # windows
     params.max_delay = 120  # windows
@@ -37,9 +35,9 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 300
-    params.shared_discount = 0.2
-    params.simTime = 0.1
+    params.nP = 400
+    params.simTime = 0.25
+    params.shared_discount = 0.25
 
     # prepare ExMAS
     inData = ExMAS.utils.generate_demand(inData, params)  # generate requests
@@ -51,24 +49,25 @@ def single_eval(inData, params, MATCHING_OBJS, PRUNINGS, PRICING,
                 minmax = ('min','max'),
                 store_res = True):
 
-    inData = prunings.determine_prunings(inData, PRUNINGS) #
+    inData = prunings.determine_prunings(inData, PRUNINGS) # set pruned to boolean flag for matching
 
-
-
-    # set pruned to boolean flag for matching
     inData.sblts.rides['platform'] = inData.sblts.rides.pruned.apply(
-        lambda x: 1 if x else -1)  # use only pruned in the
+        lambda x: 1 if x else -1)  # use only pruned rides in the matching
     inData.sblts.requests['platform'] = 1
     inData.requests['platform'] = inData.requests.apply(lambda x: [1], axis=1)
 
-    for params.matching_obj in MATCHING_OBJS:  # two objective functions
+    for params.matching_obj in MATCHING_OBJS:  # for each objective function
         for params.minmax in minmax:  # best and worst prices of anarchy
-            res_name = '{}-{}-{}-{}-{}'.format(PRICING, MATCHING_OBJS, PRUNINGS, params.matching_obj, params.minmax)  # name of experiment
+            res_name = 'Scenario-{}_Pricing-{}_Objective-{}_Pruning-{}_minmax-{}'.format(EXPERIMENT_NAME,
+                                                                                                      PRICING,
+                                                                                                      MATCHING_OBJS,
+                                                                                                      PRUNINGS,
+                                                                                                      params.minmax)  # name of experiment
             inData.logger.warning(res_name)
             if 'TSE' not in PRUNINGS:
                 inData = matching(inData, params, make_assertion=False)  # < - main matching
             else:
-                inData = prunings.algo_TSE(inData, params.matching_obj)
+                inData = prunings.algo_TSE(inData, params.matching_obj)  # here we do not do ILP, but heuristical algorithm
 
             inData = evaluate_shareability(inData, params)
 
@@ -114,25 +113,25 @@ def process_results(inData):
     # called at the end of pipeline to wrap-up the results
     ret_veh = dict()
     for col in inData.results.rides.columns:
-        if '-' in col:
+        if '-' in col:  # cols with results
             ret_veh[col] = inData.results.rides[inData.results.rides[col] == True][['u_veh', 'costs_veh']].sum()
     ret_veh = pd.DataFrame(ret_veh).T
 
     ret_pax = dict()
     for col in inData.results.rm.columns:
-        if '-' in col:
+        if '-' in col:  # cols with results
             ret_pax[col] = inData.results.rm[inData.results.rm[col] == 1][['ttrav_sh', 'cost_user', 'degree']].sum()
 
     ret_pax = pd.DataFrame(ret_pax).T
     # ret_pax['min_max'] = ret_pax.apply(lambda x: 'min' if 'min' in x.name else 'max', axis=1)
-    ret_pax['ttrav_sh'] = ret_pax['ttrav_sh'] / ret_pax.mean()['ttrav_sh']
-    ret_pax['cost_user'] = ret_pax['cost_user'] / ret_pax.mean()['cost_user']
-    ret_pax['degree'] = ret_pax['degree'] / 100
+    #ret_pax['ttrav_sh'] = ret_pax['ttrav_sh'] / ret_pax.mean()['ttrav_sh']
+    #ret_pax['cost_user'] = ret_pax['cost_user'] / ret_pax.mean()['cost_user']
+    #ret_pax['degree'] = ret_pax['degree'] / 100
 
     inData.results.KPIs = pd.DataFrame(inData.results.KPIs).T
 
-    inData.results.df = pd.concat([ret_pax, ret_veh, inData.results.KPIs], axis=1)
-    inData.results.df.to_csv(EXPERIMENT_NAME+'_KPIs.csv')
+    inData.results.KPIs = pd.concat([ret_pax, ret_veh, inData.results.KPIs], axis=1)
+    inData.results.KPIs.to_csv(EXPERIMENT_NAME+'_KPIs.csv')
     inData.results.rides.to_csv(EXPERIMENT_NAME + '_rides.csv')
     inData.results.rm.to_csv(EXPERIMENT_NAME + '_rm.csv')
 
@@ -141,7 +140,7 @@ def process_results(inData):
 
 def pipe():
 
-    inData, params = prep()
+    inData, params = prep()  # load params, load graph, create demand
 
     # clear
     inData.sblts.mutually_exclusives = []
@@ -156,25 +155,24 @@ def pipe():
     inData.results.KPIs = dict()
 
     PRICING = 'u_veh'  # start with basic ExMAS
-    ALGO = 'EXMAS'
+    PRUNING = 'EXMAS'
     inData = single_eval(inData, params,
                          MATCHING_OBJS=['u_veh'],  # this can be more
                          PRUNINGS=[],  # and this can be more
                          PRICING='EXMAS')
-    #inData = single_eval(inData, params, None, PRICING, ALGO)
+
 
     params.multi_platform_matching = True
     params.assign_ride_platforms = False
 
+    PRUNINGS=dict() # algorithms to apply and their names
+    PRUNINGS['TNE'] = prunings.algo_TNE
+    PRUNINGS['HERMETIC'] = prunings.algo_HERMETIC
+    PRUNINGS['RUE'] = prunings.algo_RUE
+    PRUNINGS['RSIE'] = prunings.algo_RSIE
+    PRUNINGS['TSE'] = prunings.algo_TSE
 
-    ALGOS=dict() # algorithms to apply and their names
-    ALGOS['TNE'] = prunings.algo_TNE
-    ALGOS['HERMETIC'] = prunings.algo_HERMETIC
-    ALGOS['RUE'] = prunings.algo_RUE
-    ALGOS['RSIE'] = prunings.algo_RSIE
-    ALGOS['TSE'] = prunings.algo_TSE
-
-    PRICINGS = dict() # pricings to apply and their names
+    PRICINGS = dict()  # pricings to apply and their names
     PRICINGS['UNIFORM'] = pricings.uniform_split
     PRICINGS['EXTERNALITY'] = pricings.externality_split
     PRICINGS['RESIDUAL'] = pricings.residual_split
@@ -182,18 +180,18 @@ def pipe():
 
     for PRICING, pricing in PRICINGS.items():
         inData = pricing(inData)  # apply pricing strategy
-        for ALGO, algorithm in ALGOS.items():
-            inData = algorithm(inData, price_column=PRICING)  # apply pruning strategies for a given pricing strategy
-        for ALGO, algorithm in ALGOS.items():  # perform assignment for single prunings
+        for PRUNING, pruning in PRUNINGS.items():
+            inData = pruning(inData, price_column=PRICING)  # apply pruning strategies for a given pricing strategy
+        for PRUNING, pruning in PRUNINGS.items():  # perform assignment for single prunings
             inData = single_eval(inData, params,
                                  MATCHING_OBJS = ['total_group_cost'],  # this can be more
-                                 PRUNINGS = [ALGO],  # and this can be more
+                                 PRUNINGS = [PRUNING],  # and this can be more
                                  PRICING = PRICING,  # this is taken from first level loop
                                  minmax = ('min','max'))  # direction BPoA, WPoA
 
-    ALGO = 'WINDOWS'
+    PRUNING = 'WINDOWS'
     PRICING =  'EXMAS'
-    inData = single_eval_windows(inData, params, None, PRICING, ALGO)
+    inData = single_eval_windows(inData, params, None, PRICING, PRUNING)
 
     inData = process_results(inData)
 

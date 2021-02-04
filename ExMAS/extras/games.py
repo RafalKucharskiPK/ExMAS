@@ -42,6 +42,10 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
             ret[request_indexes[i]] = 1
         return ret
 
+    step = 1
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
     im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
     mtx = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
     m = pd.DataFrame(mtx).astype(int)
@@ -67,6 +71,10 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     ranking = m_user_costs.rank(1, ascending=True, method='first')  # rank rides by lowest cost
 
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
+
     beta = -10  # behavioural parameter
 
     # matrices: row = pax , col = ride , val = cost, ranking, prob, etc.
@@ -90,6 +98,9 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
     inData.sblts.rides['treqs'] = inData.sblts.rides.apply(lambda x: inData.sblts.requests.loc[x.indexes].treq.values,
                                                            axis=1)
 
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
     def calc_deps(r):
         deps = [r.times[0]]
         for d in r.times[1:r.degree]:
@@ -111,6 +122,8 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
             multis.append([ride.name, t])
     multis = pd.DataFrame(index=pd.MultiIndex.from_tuples(multis))
 
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
 
     multis['ride'] = multis.index.get_level_values(0)
     multis['traveller'] = multis.index.get_level_values(1)
@@ -141,6 +154,9 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
     rides['supergroups'] = rides.apply(givemesupersets, axis=1)
 
     inData.sblts.rides = rides
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
 
 
 
@@ -182,7 +198,11 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     # log sum of probabilities
     inData.sblts.rides['logsum_prob'] = inData.sblts.rides.apply(lambda ride: sum(math.log(_) for _ in ride.probs),
-                                                                 axis=1)
+                                                            axis=1)
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
     if CALC_SUBRIDES:
         # identify rides contained in rides eg. ride (1,3) is contained in ride (1,3,5)
         ret = dict()

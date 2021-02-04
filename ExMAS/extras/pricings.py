@@ -90,6 +90,7 @@ def externality_split(inData):
             for subgroup, subgroup_indexes in subgroups.iteritems():  # iterate all subgroup
                 if len(subgroup_indexes) == (r.degree - 1):  # see if subgroup has degree - 1 travellers
                     if traveller not in subgroup_indexes:  # see if traveller not in this group
+
                         price = min(price, rides.loc[subgroup].total_group_cost) # if so, update the price
                         # (if lower than current)
             price = r.total_group_cost - price  # eq. 25
@@ -116,8 +117,8 @@ def residual_split(inData):
     rides = inData.sblts.rides
 
     # it uses residual of rides as computed in update_costs
-    jjii
-    rm['RESIDUAL'] = rm.apply(lambda x: x.residual_user * x.cost_user / rides.loc[x.ride].costs_user.sum() + x.cost_single,axis = 1)
+    rm['RESIDUAL'] = rm.apply(lambda x: x.residual_user * x.cost_user / rides.loc[x.ride].costs_user.sum() +
+                                        x.cost_single,axis = 1)
     # and splits it proportionally to costs_users
     rides['RESIDUAL'] = rides['residual']  # this will be objective fun in matching
 
