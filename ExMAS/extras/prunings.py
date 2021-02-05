@@ -70,7 +70,6 @@ def algo_HERMETIC(inData, price_column='UNIFORM'):
 
     return inData
 
-import netwulf
 
 def algo_RUE(inData, price_column='UNIFORM'):
     # determines set of mergeable groups

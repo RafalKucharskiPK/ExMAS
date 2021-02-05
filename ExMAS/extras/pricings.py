@@ -70,6 +70,8 @@ def uniform_split(inData):
     rm['UNIFORM'] = rm.apply(lambda r: rides.loc[r.ride].total_group_cost/r.degree, axis=1)  # this is used for pruning
     rides['UNIFORM'] = rides.total_group_cost # this is objective fun of matching
 
+    rm['desired_{}'.format('UNIFORM')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].UNIFORM.min(), axis=1)
+
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides
 
@@ -104,6 +106,8 @@ def externality_split(inData):
     rm['EXTERNALITY'] = rm.apply(get_externality, axis=1)  # this will be used in pruning
     rides['EXTERNALITY'] = rides.total_group_cost  # this will be objective fun in matching
 
+    rm['desired_{}'.format('EXTERNALITY')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].EXTERNALITY.min(), axis=1)
+
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides
 
@@ -123,8 +127,8 @@ def residual_split(inData):
     rides['RESIDUAL'] = rides['residual']  # this will be objective fun in matching
 
     # to do this shall be p_i + c_i(single)
-
-
+    rm['desired_{}'.format('RESIDUAL')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].RESIDUAL.min(),
+                                                      axis=1)
 
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides
@@ -162,6 +166,9 @@ def subgroup_split(inData):
     rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis=1)
 
     rides['SUBGROUP'] = rm.groupby('ride').sum()['SUBGROUP']
+
+    rm['desired_{}'.format('SUBGROUP')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].SUBGROUP.min(),
+                                                      axis=1)
 
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides

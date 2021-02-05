@@ -5,7 +5,7 @@ import ExMAS.main
 import ExMAS.utils
 
 import pandas as pd
-EXPERIMENT_NAME = 'many'
+#EXPERIMENT_NAME = '100'
 
 
 def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
@@ -35,7 +35,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 400
+    params.nP = 100
     params.simTime = 0.25
     params.shared_discount = 0.25
 
@@ -45,7 +45,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     return inData, params
 
 
-def single_eval(inData, params, MATCHING_OBJS, PRUNINGS, PRICING,
+def single_eval(inData, params, EXPERIMENT_NAME, MATCHING_OBJS, PRUNINGS, PRICING,
                 minmax = ('min','max'),
                 store_res = True):
 
@@ -84,7 +84,7 @@ def single_eval(inData, params, MATCHING_OBJS, PRUNINGS, PRICING,
     return inData
 
 
-def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):  # evaluate windows-based approach
+def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO, EXPERIMENT_NAME):  # evaluate windows-based approach
     # this has to be called last, since it screws the inData.sblts.rides
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
@@ -97,7 +97,11 @@ def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):  # ev
 
     for params.matching_obj in ['u_veh']:  # two objective functions
         for params.minmax in ['min', 'max']:  # best and worst prices of anarchy
-            res_name = '{}-{}-{}-{}'.format(PRICING, ALGO, params.matching_obj, params.minmax)  # name of experiment
+            res_name = 'Scenario-{}_Pricing-{}_Objective-{}_Pruning-{}_minmax-{}'.format(EXPERIMENT_NAME,
+                                                                                         PRICING,
+                                                                                         params.matching_obj,
+                                                                                         ALGO,
+                                                                                         params.minmax)  # name of experiment
             inData.logger.warning(res_name)
             windows = matching(windows, params, make_assertion=False)  # < - main matching
             windows = evaluate_shareability(windows, params)
@@ -109,7 +113,7 @@ def single_eval_windows(inData, params, pruning_algorithm, PRICING, ALGO):  # ev
     return inData
 
 
-def process_results(inData):
+def process_results(inData, EXPERIMENT_NAME):
     # called at the end of pipeline to wrap-up the results
     ret_veh = dict()
     for col in inData.results.rides.columns:
@@ -138,7 +142,7 @@ def process_results(inData):
     return inData
 
 
-def pipe():
+def pipe(EXPERIMENT_NAME):
 
     inData, params = prep()  # load params, load graph, create demand
 
@@ -156,7 +160,7 @@ def pipe():
 
     PRICING = 'u_veh'  # start with basic ExMAS
     PRUNING = 'EXMAS'
-    inData = single_eval(inData, params,
+    inData = single_eval(inData, params, EXPERIMENT_NAME = EXPERIMENT_NAME,
                          MATCHING_OBJS=['u_veh'],  # this can be more
                          PRUNINGS=[],  # and this can be more
                          PRICING='EXMAS')
@@ -184,6 +188,7 @@ def pipe():
             inData = pruning(inData, price_column=PRICING)  # apply pruning strategies for a given pricing strategy
         for PRUNING, pruning in PRUNINGS.items():  # perform assignment for single prunings
             inData = single_eval(inData, params,
+                                 EXPERIMENT_NAME = EXPERIMENT_NAME,
                                  MATCHING_OBJS = ['total_group_cost'],  # this can be more
                                  PRUNINGS = [PRUNING],  # and this can be more
                                  PRICING = PRICING,  # this is taken from first level loop
@@ -191,12 +196,13 @@ def pipe():
 
     PRUNING = 'WINDOWS'
     PRICING =  'EXMAS'
-    inData = single_eval_windows(inData, params, None, PRICING, PRUNING)
+    inData = single_eval_windows(inData, params, None, PRICING, PRUNING, EXPERIMENT_NAME)
 
-    inData = process_results(inData)
+    inData = process_results(inData, EXPERIMENT_NAME)
 
     return inData
 
 
 if __name__ == '__main__':
-    pipe()
+    for EXPERIMENT_NAME in ['repl1','repl2','repl3','repl4']:
+        pipe(EXPERIMENT_NAME)
