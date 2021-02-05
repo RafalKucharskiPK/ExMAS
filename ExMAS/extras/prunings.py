@@ -15,6 +15,21 @@ import itertools
 import pandas as pd
 import numpy as np
 
+def algo_EXMAS(inData, price_column='UNIFORM'):
+    # prunes the rides to only those whose costs are lower than for single ride for all travellers
+
+    rm = inData.sblts.rides_multi_index  # ride (group) - traveller data
+    rides = inData.sblts.rides  # rides data
+
+    rides['pruned_EXMAS'] = True  # this will be used as a filter in pruning
+    rm['pruned_EXMAS'] = True  # store data about pruned ride-traveller pairs
+
+    inData.sblts.rides_multi_index = rm  # store back
+    inData.sblts.rides = rides  #          tables
+
+    return inData
+
+
 
 def algo_TNE(inData, price_column='UNIFORM'):
     # prunes the rides to only those whose costs are lower than for single ride for all travellers
@@ -185,6 +200,8 @@ def determine_prunings(inData, ALGOS):
 
     def lambda_prune(row):
         pruned  = True
+        if 'EXMAS' in ALGOS:
+            pruned = pruned and row.pruned_EXMAS
         if 'TNE' in ALGOS:
             pruned = pruned and row.pruned_TNE
         if 'HERMETIC' in ALGOS:
