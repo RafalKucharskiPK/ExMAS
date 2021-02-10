@@ -17,7 +17,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.matching_obj = 'u_veh'
 
     # parameterization
-    params.veh_cost = 1.3 * params.VoT / params.avg_speed  # operating costs per kilometer
+    params.veh_cost = 2.3 * params.VoT / params.avg_speed  # operating costs per kilometer
     params.fixed_ride_cost = 1  # ride fixed costs (per vehicle)
     params.time_cost = params.VoT  # travellers' cost per travel time
     params.wait_cost = params.time_cost * 1.5  # and waiting
@@ -35,7 +35,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 150
+    params.nP = 50
     params.simTime = 0.25
     params.shared_discount = 0.2
 
@@ -74,9 +74,19 @@ def single_eval(inData, params, EXPERIMENT_NAME, MATCHING_OBJS, PRUNINGS, PRICIN
 
             if store_res:
                 inData.results.rides[res_name] = inData.sblts.rides.selected.values  # store results (selected rides)
+
                 inData.sblts.rides.selected.name = res_name
                 inData.results.rm = inData.results.rm.join(inData.sblts.rides.selected,
                                                            on='ride')  # store selected rides in the multiindex table
+
+                rm = inData.results.rm
+                pruneds = inData.sblts.rides[inData.sblts.rides.pruned==True].index
+                rm['bestpossible_{}'.format(PRICING)] = rm.apply(lambda r: rm.loc[pruneds,:][(rm.traveller == r.traveller)][PRICING].min(),
+                                                               axis=1)
+                selecteds = rm.loc[inData.sblts.rides[inData.sblts.rides.selected==True].index]
+                inData.sblts.res['eq13'] = selecteds[selecteds['bestpossible_{}'.format(PRICING)] == selecteds[PRICING]].shape[0]/selecteds.shape[0]
+
+
                 inData.sblts.res['pricing'] = MATCHING_OBJS[0]  # columns for KPIs table
                 inData.sblts.res['algo'] = PRUNINGS[0]
                 inData.sblts.res['experiment'] = EXPERIMENT_NAME
@@ -259,5 +269,5 @@ def pipe(EXPERIMENT_NAME):
 
 
 if __name__ == '__main__':
-    for EXPERIMENT_NAME in ['r1', 'r2', 'r3', 'r4']:
+    for EXPERIMENT_NAME in ['eq13']: #['r1', 'r2', 'r3', 'r4']:
         pipe(EXPERIMENT_NAME)
