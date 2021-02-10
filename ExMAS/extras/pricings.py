@@ -148,14 +148,12 @@ def subgroup_split(inData):
         subgroups = r.subgroups # subgroups of this group
         subgroup_indexes = rides.loc[subgroups][['indexes_set']]  # travellers indexes in the subgroups
 
-        prices = dict()  # return dict to populate
-        best_subgroups = dict()  # return dict to populate
+        prices = dict()  # return dict to populat
         while len(indexes_set) > 0:  # until everyone is assigned
             effs = rides.loc[subgroups].cost_efficiency  # see the efficiencies of remaining subgroups
             J, z  = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
             for i in rides.loc[J].indexes_set:
                 prices[i] = z # assign the prices
-                best_subgroups[i] = J  # assign the prices
 
             indexes_set = indexes_set - rides.loc[J].indexes_set  # remove those from the best group
             subgroup_indexes = rides.loc[subgroups][['indexes_set']]
@@ -165,22 +163,14 @@ def subgroup_split(inData):
             subgroups = subgroup_indexes[subgroup_indexes.f].index  # filter to those not assigned
             # loop and assign the ones who are not assigned left
 
-        return prices, best_subgroups
+        return prices
 
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
 
     prices = dict() # prices to update
-    subgroups = dict()  # return dict to populat
     for i, r in rides.iterrows():
-        ret_prices, ret_subgroups = get_subgroup_price(r)
-        prices.update(ret_prices) # for each ride see price for travellers
-        subgroups.update(ret_subgroups)
-
-
-    rm['price_subgroup'] = rm.apply(lambda x: prices[x.traveller], axis=1)  # this is used for pruning
-    rides['total_price_subgroup'] = rm.groupby('ride').sum()['price_subgroup']  # this is objective fun of matching
-    rides['excess_subgroup'] = rides['total_price_subgroup'] - rides['total_group_cost']
+        prices.update(get_subgroup_price(r)) # for each ride see price for travellers
 
     rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis = 1) # this is used for pruning
     rides['SUBGROUP'] = rm.groupby('ride').sum()['SUBGROUP']  # this is objective fun of matching
