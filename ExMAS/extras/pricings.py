@@ -172,8 +172,23 @@ def subgroup_split(inData):
     for i, r in rides.iterrows():
         prices.update(get_subgroup_price(r)) # for each ride see price for travellers
 
-    rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis = 1) # this is used for pruning
+    rm['RESIDUAL'] = rm.apply(lambda x: x.residual_user * x.cost_single / x.total_singles +
+                                        x.cost_single, axis=1)
+
+    rm['price_subgroup'] = rm.apply(lambda x: prices[x.traveller], axis=1)  # this is used for pruning
+    rides['total_price_subgroup'] = rm.groupby('ride').sum()['price_subgroup']  # this is objective fun of matching
+    rides['excess_subgroup'] =  rides['total_group_cost'] - rides['total_price_subgroup']
+
+
+    rm['SUBGROUP'] = rm.apply(lambda x: rides.loc[x.ride].excess_subgroup * x.cost_single / x.total_singles +
+                                        x.price_subgroup,axis = 1)
+
+
+    #rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis = 1) # this is used for pruning
     rides['SUBGROUP'] = rm.groupby('ride').sum()['SUBGROUP']  # this is objective fun of matching
+
+    rm['desired_{}'.format('SUBGROUP')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].RESIDUAL.min(),
+                                                      axis=1)
 
     inData.sblts.rides_multi_index = rm
     inData.sblts.rides = rides

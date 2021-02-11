@@ -335,7 +335,7 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3):
 
 
     G = inData.G
-    fig, ax = ox.plot_graph(G, figsize=(15, 15), node_size=0, edge_linewidth=0.3,
+    fig, ax = ox.plot_graph(G, figsize=(25, 25), node_size=0, edge_linewidth=0.3,
                             show=False, close=False,
                             edge_color='grey',  bgcolor='white')
 
@@ -371,7 +371,7 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3):
         for route in routes:
             add_route(ax, route, color=[colors[deg]], lw=lw, alpha=0.7)
     plt.tight_layout()
-    plt.savefig('map.png')
+    plt.savefig('map.png', dpi = 300)
 
 
 def networkstats(inData):

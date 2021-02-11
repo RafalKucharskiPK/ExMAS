@@ -10,7 +10,7 @@ import pandas as pd
 # EXPERIMENT_NAME = '100'
 
 
-def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
+def prep(params_path='../../ExMAS/spinoffs/game/ams.json'):
     params = ExMAS.utils.get_config(params_path, root_path='../../')  # load the default
     params.t0 = pd.to_datetime(params.t0)
     params.logger_level = 'WARNING'
@@ -35,7 +35,7 @@ def prep(params_path='../../ExMAS/spinoffs/game/pipe.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 50
+    params.nP = 100
     params.simTime = 0.25
     params.shared_discount = 0.2
 
@@ -269,5 +269,5 @@ def pipe(EXPERIMENT_NAME):
 
 
 if __name__ == '__main__':
-    for EXPERIMENT_NAME in ['eq13']: #['r1', 'r2', 'r3', 'r4']:
+    for EXPERIMENT_NAME in ['subs']: #['r1', 'r2', 'r3', 'r4']:
         pipe(EXPERIMENT_NAME)
