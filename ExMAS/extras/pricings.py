@@ -10,7 +10,6 @@ Used in the game-theoretical study of the paper ....
 Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
 """
 
-import numpy as np
 
 def update_costs(inData, params):
     '''
@@ -43,6 +42,8 @@ def update_costs(inData, params):
                                       axis=1)  # assign  total ride costs in rm table
     rides['total_group_cost'] = rides['costs_total'] # seems repetition of costs total
     rides['cost_efficiency'] = rides['total_group_cost'] / rides.degree  # total cost per rider
+
+    rm['cost_efficiency'] = rm['total_group_cost']/rm.degree
 
     # cost of a single ride for a user
     rm['cost_single'] = rm.apply(

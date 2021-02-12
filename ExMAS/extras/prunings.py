@@ -170,7 +170,7 @@ def algo_TSE(inData, price_column='UNIFORM'):
     rm = inData.sblts.rides_multi_index  # ride (group) - traveller data
     rides = inData.sblts.rides  # rides data
     selected = list()  # list of selected rides
-    rides['TSE_obj_fun'] = rm.groupby('ride')[price_column].max()  # see efficiencies (criteria for assignment)
+    rides['TSE_obj_fun'] = rm.groupby('ride')['cost_efficiency'].max()  # see efficiencies (criteria for assignment)
     rides = rides[rides.pruned]  # only pruned rides
 
     assigned = list() # control if everyone is assigned

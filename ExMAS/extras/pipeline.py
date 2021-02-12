@@ -1,3 +1,18 @@
+"""
+# ExMAS
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+---
+
+Pipeline to reproduce game theoretical experiments
+Used in the game-theoretical study of the paper ....
+
+----
+Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
+"""
+
+
+
+
 from ExMAS.utils import inData as inData
 from ExMAS.main import matching, evaluate_shareability
 from ExMAS.extras import games, pricings, prunings, timewindow_benchmark
