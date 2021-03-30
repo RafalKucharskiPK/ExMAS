@@ -295,6 +295,99 @@ def networkstats(inData):
     ret = DotMap({'center': nearest, 'radius': inData.skim[nearest].quantile(0.75)})
     return ret
 
+def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize = 10, figsize = (25,25)):
+    import seaborn as sns
+
+    from matplotlib.collections import LineCollection
+
+    def make_schedule(t, r):
+        columns = ['node', 'times', 'req_id', 'od']
+        degree = 2 * len(t.indexes)
+        df = pd.DataFrame(None, index=range(degree), columns=columns)
+        x = t.indexes_orig
+        s = [r.loc[i].origin for i in x] + [r.loc[i].destination for i in x]
+        df.node = pd.Series(s)
+        df.req_id = x + t.indexes_dest
+        df.times = t.times
+        df.od = pd.Series(['o'] * len(t.indexes) + ['d'] * len(t.indexes))
+        return df
+
+
+    def add_route(ax, route, color='grey', lw=2, alpha=0.5):
+        # plots route on the graph alrready plotted on ax
+        edge_nodes = list(zip(route[:-1], route[1:]))
+        lines = []
+        for u, v in edge_nodes:
+            # if there are parallel edges, select the shortest in length
+            data = min(G.get_edge_data(u, v).values(), key=lambda x: x['length'])
+            # if it has a geometry attribute (ie, a list of line segments)
+            if 'geometry' in data:
+                # add them to the list of lines to plot
+                xs, ys = data['geometry'].xy
+                lines.append(list(zip(xs, ys)))
+            else:
+                # if it doesn't have a geometry attribute, the edge is a straight
+                # line from node to node
+                x1 = G.nodes[u]['x']
+                y1 = G.nodes[u]['y']
+                x2 = G.nodes[v]['x']
+                y2 = G.nodes[v]['y']
+                line = [(x1, y1), (x2, y2)]
+                lines.append(line)
+        lc = LineCollection(lines, colors=color, linewidths=lw, alpha=alpha, zorder=3)
+        ax.add_collection(lc)
+
+    s = inData.sblts.rides
+    r = inData.sblts.requests
+    G = inData.G
+    ts = [make_schedule(s.iloc[ride_index],r) for ride_index in ride_indexes]
+    # t1 = make_schedule(s.iloc[1], r)
+    # t2 = make_schedule(s[s.kind == 20].iloc[1], r)
+    #t3 = make_schedule(s[s.kind == 31].iloc[3], r)
+
+
+
+    G = inData.G
+    fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, edge_linewidth=0.3,
+                            show=False, close=False,
+                            edge_color='grey',  bgcolor='white')
+
+    #colors = {1: 'navy', 2: 'teal', 3: 'maroon', 4: 'black', 5: 'green', 6:'teal'}
+    colors = sns.color_palette("Set2",6)
+
+
+    for t in ts:
+
+        orig_points_lats, orig_points_lons, dest_points_lats, dest_points_lons = [], [], [], []
+        deg = t.req_id.nunique()
+        count = 0
+        for i in t.req_id.unique():
+            count += 1
+            r = t[t.req_id == i]
+
+            o = r[r.od == 'o'].iloc[0].node
+            d = r[r.od == 'd'].iloc[0].node
+
+            if not light:
+                ax.annotate('o' + str(i), (G.nodes[o]['x'] * 1.0001, G.nodes[o]['y'] * 1.00001), fontsize = fontsize,
+                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
+                ax.annotate('d' + str(i), (G.nodes[d]['x'] * 1.0001, G.nodes[d]['y'] * 1.00001), fontsize = fontsize,
+                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
+            route = nx.shortest_path(G, o, d, weight='length')
+            add_route(ax, route, color='black', lw=lw / 2, alpha=0.3)
+            ax.scatter(G.nodes[o]['x'], G.nodes[o]['y'], s=m_size, c=[colors[deg]], marker='o')
+            ax.scatter(G.nodes[d]['x'], G.nodes[d]['y'], s=m_size, c=[colors[deg]], marker='>')
+
+        routes = list()  # ride segments
+        o = t.node.values[0]
+        for d in t.node.values[1:]:
+            routes.append(nx.shortest_path(G, o, d, weight='length'))
+            o = d
+        for route in routes:
+            add_route(ax, route, color=[colors[deg]], lw=lw, alpha=0.7)
+    plt.tight_layout()
+    plt.savefig('map.png', dpi = 300)
+
 
 def load_albatross_csv(_inData, _params, sample=True):
     # loads the full csv of albatross for a given city
