@@ -282,7 +282,7 @@ def plot_paper_multi(tp, figname='res.svg', x='nP', ys=['$U_q$', '$U_r$'], path=
     return fig
 
 
-def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3):
+def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize = 10, figsize = (25,25)):
     import seaborn as sns
 
     from matplotlib.collections import LineCollection
@@ -335,12 +335,12 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3):
 
 
     G = inData.G
-    fig, ax = ox.plot_graph(G, figsize=(25, 25), node_size=0, edge_linewidth=0.3,
+    fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, edge_linewidth=0.3,
                             show=False, close=False,
                             edge_color='grey',  bgcolor='white')
 
     #colors = {1: 'navy', 2: 'teal', 3: 'maroon', 4: 'black', 5: 'green', 6:'teal'}
-    colors = sns.color_palette("husl",6)
+    colors = sns.color_palette("Set2",6)
 
 
     for t in ts:
@@ -356,8 +356,10 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3):
             d = r[r.od == 'd'].iloc[0].node
 
             if not light:
-                ax.annotate('o' + str(i), (G.nodes[o]['x'] * 1.0003, G.nodes[o]['y'] * 1.00002))
-                ax.annotate('d' + str(i), (G.nodes[d]['x'] * 1.0003, G.nodes[d]['y'] * 1.00002))
+                ax.annotate('o' + str(i), (G.nodes[o]['x'] * 1.0001, G.nodes[o]['y'] * 1.00001), fontsize = fontsize,
+                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
+                ax.annotate('d' + str(i), (G.nodes[d]['x'] * 1.0001, G.nodes[d]['y'] * 1.00001), fontsize = fontsize,
+                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
             route = nx.shortest_path(G, o, d, weight='length')
             add_route(ax, route, color='black', lw=lw / 2, alpha=0.3)
             ax.scatter(G.nodes[o]['x'], G.nodes[o]['y'], s=m_size, c=[colors[deg]], marker='o')
