@@ -1,18 +1,3 @@
-"""
-# ExMAS
-> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
----
-
-Pipeline to reproduce game theoretical experiments
-Used in the game-theoretical study of the paper ....
-
-----
-Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
-"""
-
-
-
-
 from ExMAS.utils import inData as inData
 from ExMAS.main import matching, evaluate_shareability
 from ExMAS.extras import games, pricings, prunings, timewindow_benchmark
@@ -50,8 +35,8 @@ def prep(params_path='../../ExMAS/spinoffs/game/ams.json'):
     params.minmax = 'min'
     params.multi_platform_matching = False
     params.assign_ride_platforms = True
-    params.nP = 100
-    params.simTime = 0.25
+    params.nP = 400
+    params.simTime = 0.15
     params.shared_discount = 0.2
 
     # prepare ExMAS
@@ -284,5 +269,5 @@ def pipe(EXPERIMENT_NAME):
 
 
 if __name__ == '__main__':
-    for EXPERIMENT_NAME in ['subs']: #['r1', 'r2', 'r3', 'r4']:
+    for EXPERIMENT_NAME in ['res400_{}'.format(_) for _ in range(1,10)]:
         pipe(EXPERIMENT_NAME)
