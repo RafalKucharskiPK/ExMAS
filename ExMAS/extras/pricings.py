@@ -9,7 +9,7 @@ Used in the game-theoretical study of the paper ....
 ----
 Rafał Kucharski, TU Delft, 2020 r.m.kucharski (at) tudelft.nl
 """
-
+import pandas as pd
 
 def update_costs(inData, params):
     '''
@@ -140,7 +140,68 @@ def residual_split(inData):
     return inData
 
 
+
 def subgroup_split(inData):
+
+    def get_subgroup_price(r):
+        # assigns traveller prices by their best alternatives
+        indexes_set = r.indexes_set  # travellers of this group
+        subgroups = r.subgroups  # subgroups of this group
+        subgroup_indexes = rides.loc[subgroups][['indexes_set']]  # travellers indexes in the subgroups
+        C_G = r.total_group_cost
+
+        z_i = dict()  # return dict to populate
+        fi_i = dict()
+        while len(indexes_set) > 0:  # until everyone is assigned
+            effs = rides.loc[subgroups].cost_efficiency  # see the efficiencies of remaining subgroups
+            J, z = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
+            for i in rides.loc[J].indexes_set:
+                z_i[i] = z  # assign the prices
+                fi_i[i] = J
+
+            indexes_set = indexes_set - rides.loc[J].indexes_set  # remove those from the best group
+            subgroup_indexes = rides.loc[subgroups][['indexes_set']]
+            subgroup_indexes['f'] = subgroup_indexes.apply(
+                lambda x: len(rides.loc[J].indexes_set.intersection(x.indexes_set)) == 0, axis=1)  # update which
+            # subgroups remain assignable
+            subgroups = subgroup_indexes[subgroup_indexes.f].index  # filter to those not assigned
+            # loop and assign the ones who are not assigned left
+
+        z_i = pd.Series(z_i)
+        #fi_i = pd.Series(fi_i)
+
+        e = C_G - sum(z_i)
+
+        c_i = z_i + e / r.degree
+
+        assert abs(C_G - c_i.sum()) < 0.001
+
+        return c_i
+
+    rm = inData.sblts.rides_multi_index
+    rides = inData.sblts.rides
+
+    prices = dict()  # prices to update
+    for i, r in rides.iterrows():
+        prices.update(get_subgroup_price(r))  # for each ride see price for travellers
+
+    rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis=1)  # this is used for pruning
+    rides['total_price_subgroup'] = rm.groupby('ride').sum()['SUBGROUP']  # this is objective fun of matching
+
+    # rm['SUBGROUP'] = rm.apply(lambda x: prices[x.traveller], axis = 1) # this is used for pruning
+    rides['SUBGROUP'] = rm.groupby('ride').sum()['SUBGROUP']  # this is objective fun of matching
+
+    rm['desired_{}'.format('SUBGROUP')] = rm.apply(lambda r: rm[rm.traveller == r.traveller].SUBGROUP.min(),
+                                                   axis=1)
+
+    inData.sblts.rides_multi_index = rm
+    inData.sblts.rides = rides
+
+    return inData
+
+
+
+def subgroup_split_old(inData):
     # determines groups of lower costs and assigns costs based on alternatives
     # algorithm 7
 
@@ -150,7 +211,7 @@ def subgroup_split(inData):
         subgroups = r.subgroups  # subgroups of this group
         subgroup_indexes = rides.loc[subgroups][['indexes_set']]  # travellers indexes in the subgroups
 
-        prices = dict()  # return dict to populat
+        prices = dict()  # return dict to populate
         while len(indexes_set) > 0:  # until everyone is assigned
             effs = rides.loc[subgroups].cost_efficiency  # see the efficiencies of remaining subgroups
             J, z = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
