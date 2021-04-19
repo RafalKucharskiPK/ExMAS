@@ -254,14 +254,14 @@ def pipe(EXPERIMENT_NAME):
                                  PRICING=PRICING,  # this is taken from first level loop
                                  minmax=('min', 'max'))  # direction BPoA, WPoA
 
-    PRUNING = 'WINDOWS'
-    PRICING = 'UNIFORM'
-    inData = single_eval_windows(inData, params,
-                                 EXPERIMENT_NAME=EXPERIMENT_NAME,
-                                 MATCHING_OBJS=['total_group_cost'],  # this can be more
-                                 PRUNINGS=[PRUNING],  # and this can be more
-                                 PRICING=PRICING,
-                                 minmax=('min', 'max'))
+    #PRUNING = 'WINDOWS'
+    #PRICING = 'UNIFORM'
+    #inData = single_eval_windows(inData, params,
+    #                             EXPERIMENT_NAME=EXPERIMENT_NAME,
+    #                             MATCHING_OBJS=['total_group_cost'],  # this can be more
+    #                             PRUNINGS=[PRUNING],  # and this can be more
+    #                             PRICING=PRICING,
+    #                             minmax=('min', 'max'))
 
     inData = process_results(inData, EXPERIMENT_NAME)
 
@@ -269,5 +269,5 @@ def pipe(EXPERIMENT_NAME):
 
 
 if __name__ == '__main__':
-    for EXPERIMENT_NAME in ['res400_{}'.format(_) for _ in range(1,10)]:
+    for EXPERIMENT_NAME in ['res400a_{}'.format(_) for _ in range(2,10)]:
         pipe(EXPERIMENT_NAME)
