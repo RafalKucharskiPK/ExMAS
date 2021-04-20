@@ -140,12 +140,7 @@ def residual_split(inData):
     return inData
 
 
-
-
-
-
 def subgroup_split(inData):
-
     rm = inData.sblts.rides_multi_index
     rides = inData.sblts.rides
 
@@ -153,35 +148,35 @@ def subgroup_split(inData):
 
     def get_subgroup_price(r):
         # assigns traveller prices by their best alternatives
-        indexes_set = r.indexes_set  # travellers of this group
-        subgroups = r.subgroups  # subgroups of this group
-
-        subgroup_indexes = rides.loc[subgroups][['indexes_set']]  # travellers indexes in the subgroups
         C_G = r.total_group_cost
         reference_cost_eff = r.cost_efficiency
+        indexes_set = r.indexes_set  # travellers of this group
+        subgroups = r.subgroups  # subgroups of this group
+        subgroup_indexes = rides.loc[subgroups][['indexes_set']]  # travellers indexes in the subgroups
 
-        z_i = dict()  # return dict to populate
-        fi_i = dict()
+        z_i = dict()  # return dict to populate - prices
+        fi_i = dict()  # return dict to populate - best subgroups
         while len(indexes_set) > 0:  # until everyone is assigned
             effs = rides.loc[subgroups].cost_efficiency  # see the efficiencies of remaining subgroups
             J, z = effs.idxmin(), effs.min()  # pick up the subgroup of greatest efficiency and its index
 
             for i in rides.loc[J].indexes_set:
                 z_i[i] = z  # assign the prices
-                fi_i[i] = J
+                fi_i[i] = J  # memorize the group
 
             indexes_set = indexes_set - rides.loc[J].indexes_set  # remove those from the best group
             subgroup_indexes = rides.loc[subgroups][['indexes_set']]
             subgroup_indexes['f'] = subgroup_indexes.apply(
                 lambda x: len(rides.loc[J].indexes_set.intersection(x.indexes_set)) == 0, axis=1)  # update which
-            # subgroups remain assignable
+            # subgroups remaining assignable
             subgroups = subgroup_indexes[subgroup_indexes.f].index  # filter to those not assigned
             # loop and assign the ones who are not assigned left
 
+        # cost splitting
         z_i = pd.Series(z_i, name='z')
         fi_i = pd.Series(fi_i, name='fi')
 
-        e = C_G - sum(z_i)
+        e = C_G - sum(z_i)  # excess
 
         # check budget balance
 
@@ -191,41 +186,44 @@ def subgroup_split(inData):
         else:  # otherwise let's see other subgroups
             # Sort the sets fi in increasing average costs
             df = pd.concat([fi_i, z_i], axis=1).sort_values('z')
-            df['trav'] = df.index.copy()
-            df = df.set_index('fi')  # main dataframe
+            df.index.name = 'i'
             df['c_i'] = df.z.copy()  # set the costs to the ones generated with the algo above
 
-            J_ref = reference_cost_eff  # set the cut-off for reference
+            J_ref = reference_cost_eff  # set the cut-off for reference (will be increased in the loop)
 
             while True:  # loop
-                J, z = df[df.z > J_ref].z.idxmin(), df[df.z > J_ref].z.min()
-                df.loc[df.z == z, 'c_i'] = reference_cost_eff
+                J, z = df.loc[df[df.z > J_ref].z.idxmin()].fi, df[
+                    df.z > J_ref].z.min()  # find the first group beyong the threshold
 
-                if df.c_i.sum() > C_G:
-                    J_ref = df.loc[rides.loc[J].indexes].z.min()  # move to the next index
+                df['c_i'] = df.apply(lambda row: reference_cost_eff if row.z == z else row.c_i,
+                                     axis=1)  # update costs of this group to reference ones
+
+                if df.c_i.sum() > C_G:  # see if now excess is OK
+
+                    J_ref = df.loc[rides.loc[J].indexes_set].z.min()  # move to the next index
 
                 else:
-                    c = (C_G - df[~(df.index == J)].c_i.sum()) / rides.loc[J].degree
+                    # distribute remainings
+                    c = (C_G - df[~(df.fi == J)].c_i.sum()) / rides.loc[J].degree
                     df.loc[df.z == z, 'c_i'] = c
                     break
-            c_i = df.set_index('trav').c_i
+            c_i = df.c_i
 
         assert abs(C_G - c_i.sum()) < 0.0001
 
         return c_i
 
     for i, r in rides.iterrows():
-
         ret = get_subgroup_price(r)
-
         for j, row in ret.iteritems():
-
-            prices.append([r.name, j, row] )
-    prices = pd.DataFrame(prices, columns = ['ride_index','traveller_index','SUBGROUP']).set_index(['ride_index','traveller_index'])
-    rm.index = rm.index.set_names(['ride_index','traveller_index'])
+            prices.append([r.name, j, row])
+    prices = pd.DataFrame(prices, columns=['ride_index', 'traveller_index', 'SUBGROUP']).set_index(
+        ['ride_index', 'traveller_index'])
+    if 'SUBGROUP' in rm.columns:
+        del rm['SUBGROUP']
+    rm.index = rm.index.set_names(['ride_index', 'traveller_index'])
 
     rm = rm.join(prices)
-
 
     rides['total_price_subgroup'] = rm.groupby('ride').sum()['SUBGROUP']  # this is objective fun of matching
 
