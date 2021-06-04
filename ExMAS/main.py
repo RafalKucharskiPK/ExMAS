@@ -48,7 +48,7 @@ import ast
 import math
 import time
 import sys
-from itertools import product
+from itertools import product, combinations
 import logging
 
 from dotmap import DotMap
@@ -412,6 +412,13 @@ def pairs(_inData, params, process=True, check=True, plot=False):
     r['i'] = r.index.get_level_values(0)  # assign index to columns
     r['j'] = r.index.get_level_values(1)
     r = r[~(r.i == r.j)]  # remove diagonal
+
+    # remove unmergable pairs
+    unmergables = _inData.get('unmergables', list())
+    if len(unmergables)>0:
+        r['unmergable'] = r.apply(lambda row:  (int(row.i),int(row.j)) in _inData.unmergables, axis = 1)
+        r = r[~r.unmergable]
+
     _inData.logger.info(str(r.shape[0]) + '\t nR*(nR-1)')
     _inData.sblts.log.sizes[2] = {'potential': r.shape[0]}
 
@@ -618,6 +625,12 @@ def extend_degree(_inData, params, degree):
     treq_dict = _inData.sblts.requests.treq.to_dict()  # requests times
     VoT_dict = _inData.sblts.requests.VoT.to_dict()  # valuoes of time
 
+    def filter_unmergable_groups(row):
+        for pair in combinations(row.indexes, 2):
+            if pair in inData.unmergables:
+                return True
+            return False
+
     nPotential = 0
     retR = list()  # for output
 
@@ -629,8 +642,15 @@ def extend_degree(_inData, params, degree):
     df = pd.DataFrame(retR, columns=['indexes', 'indexes_orig', 'u_pax', 'u_veh', 'kind',
                                      'u_paxes', 'times', 'indexes_dest']) # data synthax for rides
 
+
     df = df[RIDE_COLS]
     df = df.reset_index()
+
+    unmergables = _inData.get('unmergables', list())
+    if len(unmergables) > 0:
+        df['unmergable'] = df.apply(filter_unmergable_groups, axis = 1)
+        df = df[~df.unmergable]
+
     _inData.logger.info('At degree {} feasible extensions found out of {} searched'.format(degree,
                                                                                               df.shape[0],
                                                                                               nPotential))

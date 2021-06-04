@@ -855,4 +855,54 @@ def make_graph(requests, rides,
             plt.savefig(figname)
     return G
 
+def make_traveller_ride_matrix(inData):
+    """
+    creates a ride-traveller mutliindex matrix.
+    matrix has two indexes: ride and traveller and stores basic information on pooled rides.
+    uses as input inData.sblts.rides
+
+    shall be applied after ExMAS rides has been calculated
+
+    :param inData: inData.sblts.rides, inData.sblts.requests
+    :return: DataFrame with data on traveller ride pairs
+    """
+    inData.sblts.rides['treqs'] = inData.sblts.rides.apply(lambda x: inData.sblts.requests.loc[x.indexes].treq.values,
+                                                           axis=1)
+
+    def calc_deps(r):
+        deps = [r.times[0]]
+        for d in r.times[1:r.degree]:
+            deps.append(deps[-1] + d)  # departure times
+        t = inData.sblts.requests
+        return deps
+
+    inData.sblts.rides['deps'] = inData.sblts.rides.apply(calc_deps, axis=1)
+
+    inData.sblts.rides['delays'] = inData.sblts.rides['deps'] - inData.sblts.rides['treqs']
+
+    inData.sblts.rides['ttravs'] = inData.sblts.rides.apply(lambda r: [
+        sum(r.times[i + 1:r.indexes_orig.index(r.indexes[i]) + r.degree + 1 + r.indexes_dest.index(r.indexes[i])]) for i
+        in range(r.degree)], axis=1)
+
+    multis = list()
+    for i, ride in inData.sblts.rides.iterrows():
+        for t in ride.indexes:
+            multis.append([ride.name, t])
+    multis = pd.DataFrame(index=pd.MultiIndex.from_tuples(multis))
+
+    multis['ride'] = multis.index.get_level_values(0)
+    multis['traveller'] = multis.index.get_level_values(1)
+    multis = multis.join(inData.sblts.requests[['treq', 'dist', 'ttrav', 'u']], on='traveller')
+    multis = multis.join(inData.sblts.rides[['u_veh', 'u_paxes', 'degree', 'indexes', 'ttravs', 'delays']], on='ride')
+    multis['order'] = multis.apply(lambda r: r.indexes.index(r.traveller), axis=1)
+    multis['ttrav_sh'] = multis.apply(lambda r: r.ttravs[r.order], axis=1)
+    multis['delay'] = multis.apply(lambda r: r.delays[r.order], axis=1)
+    multis['u_sh'] = multis.apply(lambda r: r.u_paxes[r.order], axis=1)
+    multis['shared'] = multis.degree > 1
+    multis['ride_time'] = multis.u_veh
+    multis = multis[
+        ['ride', 'traveller', 'shared', 'degree', 'treq', 'ride_time', 'dist', 'ttrav', 'ttrav_sh', 'delay','u', 'u_sh']]
+    return multis
+
+
 
