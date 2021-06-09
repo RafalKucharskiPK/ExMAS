@@ -49,6 +49,7 @@ import math
 import time
 import sys
 from itertools import product, combinations
+from numpy.random import normal
 import logging
 
 from dotmap import DotMap
@@ -112,7 +113,7 @@ def main(_inData, params, plot=False):
 
     degree = 1
 
-    _inData = pairs(_inData, params, plot=plot)
+    _inData = pairs(_inData, params, plot=plot, check = params.get('make_assertion_pairs', True))
     degree = 2
     _inData.logger.info('Degree {} \tCompleted'.format(degree))
 
@@ -172,19 +173,22 @@ def single_rides(_inData, params):
 
     # prepare requests
     req = _inData.requests.copy().sort_index()
-    t0 = req.treq.min() # set 0 as the earliest departure time
-    req.treq = (req.treq - t0).dt.total_seconds().astype(int)  # recalc times for seconds starting from zero
-    req.ttrav = req.ttrav.dt.total_seconds().divide(params.avg_speed).astype(int)  # recalc travel times using speed
+    if params.get('reset_ttrav',True):
+        # reset times, reindex
+        t0 = req.treq.min() # set 0 as the earliest departure time
+        req.treq = (req.treq - t0).dt.total_seconds().astype(int)  # recalc times for seconds starting from zero
+        req.ttrav = req.ttrav.dt.total_seconds().divide(params.avg_speed).astype(int)  # recalc travel times using speed
 
-    if params.get('heterogenic', False):
-        pass
+    if params.get('VoT_std', False):
+        req['VoT'] = normal(params.VoT, params.VoT_std, params.nP)  # normally distributed Value of Time
     else:
         req['VoT'] = params.VoT  # heterogeneity not applied
 
     req['delta'] = f_delta()  # assign maximal delay in seconds
     req['u'] = params.price * req.dist / 1000 + req.VoT * req.ttrav
     req = req.sort_values(['treq', 'pax_id'])  # sort
-    req = req.reset_index()
+    if params.get('reset_ttrav', True):
+        req = req.reset_index()
 
     # req['timePT'] = 99999
     req['u_PT'] = utility_PT()
@@ -351,7 +355,7 @@ def pairs(_inData, params, process=True, check=True, plot=False):
         except:
             _inData.logger.critical('FIFO pairs assertion failed')
             _inData.logger.warning(r[~(r.t_i - r.ttrav_i > -3)])  # share time is not smaller than direct
-            _inData.logger.warning(r[~(r.t_j - r.ttrav_j > -3)])
+            _inData.logger.warning(r[~(r.t_j - r.ttrav_j > -3)][['t_j','ttrav_j']])
             _inData.logger.warning(r[~(abs(r.delay_i) <= r.delta_i)])  # is the delay within bounds
             _inData.logger.warning(r[~(abs(r.delay_j) <= r.delta_j)])
             _inData.logger.warning(r[~(r.u_i <= utility_ns_i() * 1.01)])  # do we have positive sharing utility
@@ -415,9 +419,15 @@ def pairs(_inData, params, process=True, check=True, plot=False):
 
     # remove unmergable pairs
     unmergables = _inData.get('unmergables', list())
-    if len(unmergables)>0:
-        r['unmergable'] = r.apply(lambda row:  (int(row.i),int(row.j)) in _inData.unmergables, axis = 1)
-        r = r[~r.unmergable]
+
+    if len(unmergables) > 0:
+        r['unmergables'] = r.apply(lambda row: {int(row.i), int(row.j)} in _inData.unmergables, axis = 1)
+        _inData.logger.info("Removing {} unmergable pairs from the solution of {}".format(r[r['unmergables']].shape[0],
+                                                                                          r.shape[0]))
+        r = r[~r.unmergables]
+
+
+
 
     _inData.logger.info(str(r.shape[0]) + '\t nR*(nR-1)')
     _inData.sblts.log.sizes[2] = {'potential': r.shape[0]}
@@ -440,10 +450,12 @@ def pairs(_inData, params, process=True, check=True, plot=False):
         r.destination_j.unique()).union(r.destination_j.unique()))  # limit skim to origins and destination only
     the_skim = _inData.skim.loc[skim_indices, skim_indices].div(params.avg_speed).astype(int)
     _inData.the_skim = the_skim
-
     r = query_skim(r, 'origin_i', 'origin_j', 't_oo')  # add t_oo to main dataframe (r)
     q = '(treq_i + t_oo + delta_i >= treq_j - delta_j) & (treq_i + t_oo - delta_i <= treq_j + delta_j)'
     r = r.query(q)  # can we arrive at origin of j within his time window?
+    if len(r) == 0:
+        _inData.sblts.FIFO2 = r
+        return _inData
 
     # now we can see if j is reachebale from i with the delay acceptable for both
     # determine delay for i and for j (by def delay/2, otherwise use bound of one delta and remainder for other trip)
@@ -627,9 +639,9 @@ def extend_degree(_inData, params, degree):
 
     def filter_unmergable_groups(row):
         for pair in combinations(row.indexes, 2):
-            if pair in inData.unmergables:
+            if set(pair) in unmergables:
                 return True
-            return False
+        return False
 
     nPotential = 0
     retR = list()  # for output
@@ -647,9 +659,9 @@ def extend_degree(_inData, params, degree):
     df = df.reset_index()
 
     unmergables = _inData.get('unmergables', list())
-    if len(unmergables) > 0:
-        df['unmergable'] = df.apply(filter_unmergable_groups, axis = 1)
-        df = df[~df.unmergable]
+    if len(unmergables) > 0 and df.shape[0]>0:
+        df['unmergables'] = df.apply(lambda x: filter_unmergable_groups(x), axis = 1)
+        df = df[~df.unmergables]
 
     _inData.logger.info('At degree {} feasible extensions found out of {} searched'.format(degree,
                                                                                               df.shape[0],
@@ -786,8 +798,7 @@ def extend(r, S, R, params, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
                 d = (deptimefun(x))
 
                 delays = [abs(_ + x[np.argmin(d)]) for _ in delays]
-                # if _print:
-                #    pd.Series(d, index=x).plot()  # option plot d=f(dep)
+
                 u_paxes = list()
 
                 for i in range(degree + 1):
@@ -812,7 +823,7 @@ def extend(r, S, R, params, degree, dist_dict, ttrav_dict, treq_dict, VoT_dict):
     return retR, potential
 
 
-def matching(_inData, params, plot=False, make_assertion=True):
+def matching(_inData, params, plot=False):
     """
     called from the main loop
     :param _inData:
@@ -820,6 +831,7 @@ def matching(_inData, params, plot=False, make_assertion=True):
     :param make_assertion: check if results are consistent
     :return: inData.sblts.schedule - selected rides (and keys to them in inData.sblts.requests)
     """
+    process = params.get('process_matching',True)
     rides = _inData.sblts.rides.copy()
     requests = _inData.sblts.requests.copy()
 
@@ -828,7 +840,7 @@ def matching(_inData, params, plot=False, make_assertion=True):
     
     if not multi_platform_matching: # classic matching for single platform
         selected = match(im=rides, r=requests, params=params, plot=plot,
-                         make_assertion=make_assertion, logger = _inData.logger)
+                         make_assertion=params.get('make_assertion_matching', True), logger = _inData.logger)
         rides['selected'] = pd.Series(selected)
 
     else:  # matching to multiple platforms
@@ -851,29 +863,31 @@ def matching(_inData, params, plot=False, make_assertion=True):
         
     schedule = rides[rides.selected == 1].copy()
 
-    req_ride_dict = dict()
-    for i, trips in schedule.iterrows():
-        for trip in trips.indexes:
-            req_ride_dict[trip] = i
-    requests['ride_id'] = pd.Series(req_ride_dict)
-    ttrav_sh, u_sh, kinds = dict(), dict(), dict()
-    for i, sh in schedule.iterrows():
-        for j, trip in enumerate(sh.indexes):
-            pos_o = sh.indexes_orig.index(trip) + 1
-            pos_d = sh.indexes_dest.index(trip) + 1 + len(sh.indexes)
-            ttrav_sh[trip] = sum(sh.times[pos_o:pos_d])
-            u_sh[trip] = sh.u_paxes[j]
-            kinds[trip] = sh.kind
+    if process:
+        # we do not want to make this in transit ExMAS
+        req_ride_dict = dict()
+        for i, trips in schedule.iterrows():
+            for trip in trips.indexes:
+                req_ride_dict[trip] = i
+        requests['ride_id'] = pd.Series(req_ride_dict)
+        ttrav_sh, u_sh, kinds = dict(), dict(), dict()
+        for i, sh in schedule.iterrows():
+            for j, trip in enumerate(sh.indexes):
+                pos_o = sh.indexes_orig.index(trip) + 1
+                pos_d = sh.indexes_dest.index(trip) + 1 + len(sh.indexes)
+                ttrav_sh[trip] = sum(sh.times[pos_o:pos_d])
+                u_sh[trip] = sh.u_paxes[j]
+                kinds[trip] = sh.kind
 
-    requests['ttrav_sh'] = pd.Series(ttrav_sh)
-    requests['u_sh'] = pd.Series(u_sh)
-    requests['kind'] = pd.Series(kinds)
+        requests['ttrav_sh'] = pd.Series(ttrav_sh)
+        requests['u_sh'] = pd.Series(u_sh)
+        requests['kind'] = pd.Series(kinds)
 
-    requests['position'] = requests.apply(
-        lambda x: schedule.loc[x.ride_id].indexes.index(x.name) if x.ride_id in schedule.index else -1, axis=1)
-    schedule['degree'] = schedule.apply(lambda x: len(x.indexes), axis=1)
+        requests['position'] = requests.apply(
+            lambda x: schedule.loc[x.ride_id].indexes.index(x.name) if x.ride_id in schedule.index else -1, axis=1)
+        schedule['degree'] = schedule.apply(lambda x: len(x.indexes), axis=1)
 
-    if make_assertion:  # test consitency
+    if params.get('make_assertion_matching', True):  # test consitency
         assert opt_outs or len(
             requests.ride_id) - requests.ride_id.count() == 0  # all trips are assigned
         to_assert = requests[requests.ride_id >= 0] # only non optouts
@@ -908,6 +922,7 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
         request_indexes[index] = i
         request_indexes_inv[i] = index
 
+
     im_indexes = dict()
     im_indexes_inv = dict()
     for i, index in enumerate(im.index.values):
@@ -915,16 +930,14 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
         im_indexes_inv[i] = index
 
 
-
-    im['lambda_r'] = im.apply(
-        lambda x: params.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
-        axis=1)
-
     im['PassHourTrav_ns'] = im.apply(lambda x: sum([r.loc[_].ttrav for _ in x.indexes]), axis=1)
 
     r = r.reset_index()
 
-    if params.profitability:
+    if params.get("profitability",False):
+        im['lambda_r'] = im.apply(
+            lambda x: params.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
+            axis=1)
         im = im[im.lambda_r >= params.shared_discount]
         logger.info('Out of {} trips  {} are directly profitable.'.format(r.shape[0],
                                                                     im.shape[0])) if logger is not None else None

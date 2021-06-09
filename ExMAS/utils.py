@@ -302,14 +302,15 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
 
     def make_schedule(t, r):
         columns = ['node', 'times', 'req_id', 'od']
-        degree = 2 * len(t.indexes)
+        degree = 2 * len(t.indexes_orig)
         df = pd.DataFrame(None, index=range(degree), columns=columns)
         x = t.indexes_orig
+        print(x)
         s = [r.loc[i].origin for i in x] + [r.loc[i].destination for i in x]
         df.node = pd.Series(s)
         df.req_id = x + t.indexes_dest
         df.times = t.times
-        df.od = pd.Series(['o'] * len(t.indexes) + ['d'] * len(t.indexes))
+        df.od = pd.Series(['o'] * len(t.indexes_orig) + ['d'] * len(t.indexes_orig))
         return df
 
 
@@ -340,6 +341,7 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
     s = inData.sblts.rides
     r = inData.sblts.requests
     G = inData.G
+
     ts = [make_schedule(s.iloc[ride_index],r) for ride_index in ride_indexes]
     # t1 = make_schedule(s.iloc[1], r)
     # t2 = make_schedule(s[s.kind == 20].iloc[1], r)
@@ -397,6 +399,7 @@ def load_albatross_csv(_inData, _params, sample=True):
     df = pd.read_csv(os.path.join(_params.paths.albatross,
                                   _params.city.split(",")[0] + "_requests.csv"),
                      index_col='Unnamed: 0')
+    print(df.shape)
     df['treq'] = pd.to_datetime(df['treq'])
     df.treq = df.treq + (_params.t0.date() - df.treq.iloc[0].date())
     df['tarr'] = pd.to_datetime(df['tarr'])
@@ -407,6 +410,8 @@ def load_albatross_csv(_inData, _params, sample=True):
 
     df['dist'] = df.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
     df = df[df.dist < _params.dist_threshold]
+    df = df[df.dist > _params.get("min_dist",0)]
+
 
     if sample:
         df = df.sample(_params.nP)
