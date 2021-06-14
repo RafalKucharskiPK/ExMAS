@@ -86,7 +86,7 @@ def add_route(G, ax, route, color='grey', lw=2, alpha=0.5):
     ax.add_collection(lc)
 
 
-def plot_ride(inData, ride, sizes=0, fig = None, ax = None, label_offset = 0.0005):
+def plot_ride(inData, ride, sizes=0, fig=None, ax=None, label_offset=0.0005):
     G = inData.G
     routes = list()
     if fig is None:
@@ -103,7 +103,8 @@ def plot_ride(inData, ride, sizes=0, fig = None, ax = None, label_offset = 0.000
         routes.append(nx.shortest_path(G, ride.destination, ride.destinations[i], weight='length'))
     for i, origin in enumerate(ride.destinations):
         ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=10, c='blue', marker='o')
-        ax.annotate('{}'.format(ride.indexes[i]), (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset),
+        ax.annotate('{}'.format(ride.indexes[i]),
+                    (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset),
                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'), fontsize=8)
 
     transit_route = nx.shortest_path(G, ride.origin, ride.destination, weight='length')
@@ -141,27 +142,28 @@ def transitize(inData, ride, trace=False):
                 traveller.VoT * params.WtS * (traveller.s2s_ttrav + params.delay_value * traveller.delay) +
                 traveller.VoT * params.walk_discomfort * (traveller.orig_walk_time + traveller.dest_walk_time))
 
-
-
     # default return
     ret = pd.Series({'indexes': ride.indexes,
-           'origin': None,
-           'destination': None,
-           'treq': None,
-           'ttrav': None,
-           'df': None,
-           'efficient': False,
-           'transitizable': False,
-           })
+                     'origin': None,
+                     'destination': None,
+                     'treq': None,
+                     'ttrav': None,
+                     'df': None,
+                     'efficient': False,
+                     'transitizable': False,
+                     })
 
     # only pooled rides
-    if ride.degree == 1:
+    try:
+        if ride['degree'] == 1:
+            return ret  # not applicable for single rides
+    except:
         return ret  # not applicable for single rides
 
     inData.logger.warn('Transitization of pooled ride: {} of degree: {}'.format(ride.name, ride.degree))
 
     reqs = inData.sblts.requests.loc[ride.indexes]  # requests
-    rm = inData.sblts.rm.loc[ride.name, :][['ride', 'exp_u_private', 'exp_u_d2d', 'sum_exp', 'u', 'u_sh']].join(
+    rm = inData.transitize.rm.loc[ride.name, :][['ride', 'exp_u_private', 'exp_u_d2d', 'sum_exp', 'u', 'u_sh']].join(
         reqs[['origin', 'destination', 'dist', 'VoT']])  #
     params = inData.params
 
@@ -205,11 +207,11 @@ def transitize(inData, ride, trace=False):
         df_o = rm.join(orig_walks, on='origin')  # add to rm column orig_walks (this is the return dataframe)
         min_delay = np.inf
         opt_dep = early
-        for dep in range(early, late): # optimize delay for this pick-up point (this is heuristic?)
-            delays = abs((dep - orig_walks - treqs) ** 2) # see the square of delays (to avoid imbalance)
-            if delays.sum() < min_delay: # if improves
-                min_delay = delays.sum() # overwrite the best one
-                opt_dep = dep # this is the optimal departure
+        for dep in range(early, late):  # optimize delay for this pick-up point (this is heuristic?)
+            delays = abs((dep - orig_walks - treqs) ** 2)  # see the square of delays (to avoid imbalance)
+            if delays.sum() < min_delay:  # if improves
+                min_delay = delays.sum()  # overwrite the best one
+                opt_dep = dep  # this is the optimal departure
         delays = abs(opt_dep - orig_walks - treqs)  # adjust the row with delays
         delays.name = 'delay'
         inData.logger.info \
@@ -220,17 +222,17 @@ def transitize(inData, ride, trace=False):
             # inData.logger.warn('exploring {}-th destination: {}'.format(dests_list.index(dest), dest))
             dest_walks = dest_common_catchment[dest]  # walking times from drop off
             dest_walks.name = 'dest_walk_time'
-            df_o_t_d = df_o_t.join(dest_walks, on='destination') # add to data frame
+            df_o_t_d = df_o_t.join(dest_walks, on='destination')  # add to data frame
             df_o_t_d['s2s_ttrav'] = inData.skims.ride.loc[orig, dest]  # set travel times
             df_o_t_d['u_s2s'] = df_o_t_d.apply(utility_s2s, axis=1)  # compute utility for each traveller,
             # as a function of walking times, travel times, dely and fare.
             df_o_t_d['exp_u_s2s'] = (df_o_t_d.u_s2s * params.mode_choice_beta).apply(math.exp)  # exponent it
             df_o_t_d['sum_exp'] = df_o_t_d['exp_u_s2s'] + df_o_t_d['sum_exp']  # adjust denominator of MNL
-            df_o_t_d['prob_s2s'] = df_o_t_d['exp_u_s2s'] / df_o_t_d['sum_exp'] # calculate probability
+            df_o_t_d['prob_s2s'] = df_o_t_d['exp_u_s2s'] / df_o_t_d['sum_exp']  # calculate probability
             obj_fun = df_o_t_d['prob_s2s'].sum()  # sum of probabilities (can be log sum, but that works fine)
             if trace:  # full report
                 trace.append([orig, dest, opt_dep, obj_fun, orig_walks, dest_walks, delays, df_o_t_d['u_s2s'].sum()])
-            if obj_fun > best_logsum: # improvement
+            if obj_fun > best_logsum:  # improvement
                 inData.logger.info('\t Best solution {:.4f} improved to {:.4f}. '
                                    '\n \t orig:{} dep:{} dest:{}'.format(best_logsum,
                                                                          obj_fun,
@@ -250,7 +252,7 @@ def transitize(inData, ride, trace=False):
     # check efficiency
     # ret['df']['efficient'] = ret['df']['u_s2s'] <= ret['df']['u'] # see if utilities of s2s are greater than private
     ret['df']['efficient'] = ret['df']['u_s2s'] <= ret['df']['u_sh']  # see if costs of s2s are lower than d2d
-    ret['efficient'] = ret['df']['efficient'].eq(True).all() # for all the travellers
+    ret['efficient'] = ret['df']['efficient'].eq(True).all()  # for all the travellers
 
     inData.logger.warn('ride: {} \t Efficiency check: {} \t {}/{} efficient'.format(ride.name,
                                                                                     ret['efficient'],
@@ -281,16 +283,45 @@ def prepare_transitize(inData, params):
         inData.sblts.requests.loc[ride.indexes_orig].treq - inData.sblts.requests.loc[ride.indexes_orig].treq.mean()),
                                                                 axis=1)  # list depatrure delay for each traveller
 
-    inData.sblts.rm = ExMAS.utils.make_traveller_ride_matrix(inData)  # data frame with two indices: ride - traveller
-    inData.sblts.rm['exp_u_private'] = (inData.sblts.rm.u * params.mode_choice_beta).apply(math.exp)  # utilities
-    inData.sblts.rm['exp_u_d2d'] = (inData.sblts.rm.u_sh * params.mode_choice_beta).apply(math.exp)  # exp sum
-    inData.sblts.rm['sum_exp'] = inData.sblts.rm['exp_u_d2d'] + inData.sblts.rm[
+    inData.transitize.rm = ExMAS.utils.make_traveller_ride_matrix(inData)  # data frame with two indices: ride - traveller
+    inData.transitize.rm['exp_u_private'] = (inData.transitize.rm.u * params.mode_choice_beta).apply(math.exp)  # utilities
+    inData.transitize.rm['exp_u_d2d'] = (inData.transitize.rm.u_sh * params.mode_choice_beta).apply(math.exp)  # exp sum
+    inData.transitize.rm['sum_exp'] = inData.transitize.rm['exp_u_d2d'] + inData.transitize.rm[
         'exp_u_private']  # to speed up calculations
+
+    # store d2d results
+    inData.transitize.requests1 = inData.sblts.requests.copy()  # store requests
+    inData.transitize.requests1.to_csv('{}_requests1.csv'.format(EXPERIMENT_NAME))
+    inData.transitize.rides1 = inData.sblts.rides.copy()  # store d2d rides
+    inData.transitize.rides1.to_csv('{}_rides1.csv'.format(EXPERIMENT_NAME))
+    inData.transitize.solution1 = inData.transitize.rides1[inData.transitize.rides1.selected == True].copy()
+    inData.transitize.solution1.to_csv('{}_solution1'.format(EXPERIMENT_NAME))  # store ExMAS solution
+    inData.transitize.rm.to_csv('{}_rm.csv'.format(EXPERIMENT_NAME))  # store ExMAS solution
+
+    inData.transitize.report = dict()
+
+    inData.transitize.report['private'] = {'veh_km': inData.transitize.requests1.dist.sum(),
+                                           'veh_h': inData.transitize.requests1.ttrav.sum(),
+                                           'pax_h': inData.transitize.requests1.ttrav.sum(),
+                                           'pax_km': inData.transitize.requests1.ttrav.sum(),
+                                           'u': inData.transitize.requests1.u.sum(),
+                                           'walk_dist': 0,
+                                           'walk_time': 0}
+    d2d = inData.transitize.rides1[inData.transitize.rides1.selected == True]
+    rm = inData.transitize.rm[inData.transitize.rm.ride.isin(d2d.index)]
+
+    inData.transitize.report['d2d'] = {'veh_km': d2d.u_veh.sum() * params.avg_speed,
+                                       'veh_h': d2d.u_veh.sum(),
+                                       'pax_h': rm.ttrav_sh.sum(),
+                                       'pax_km': rm.ttrav_sh.sum() * params.avg_speed,
+                                       'u': d2d.u_pax.sum()}
+    pd.DataFrame(inData.transitize.report).to_csv('{}_report.csv'.format(EXPERIMENT_NAME))
+
     return inData
 
 
 def list_unmergables(inData):
-    df = inData.transitize.second_level_requests
+    df = inData.transitize.request2
 
     def unmergables(row):
         # returns list of all the subgroup indiced contained in a ride
@@ -300,7 +331,7 @@ def list_unmergables(inData):
     df.unmergables = df.apply(lambda m: [x for x in m.unmergables if x != m.name], axis=1)
 
     unmergables = list()
-    for i, row in inData.transitize.second_level_requests.iterrows():
+    for i, row in inData.transitize.request2.iterrows():
         [unmergables.append(set([row.name, _])) for _ in row.unmergables]
     inData['unmergables'] = unmergables
     inData.logger.warn('{} unmergable pairs from ExMAS'.format(len(inData.unmergables)))
@@ -308,15 +339,8 @@ def list_unmergables(inData):
     return inData
 
 
-
-if __name__ == "__main__":
-    DEBUG = True
-    EXPERIMENT_NAME = 'TEST'
-
-    cwd = os.getcwd()
-    os.chdir(os.path.join(cwd, '..'))
-
-    params = ExMAS.utils.get_config('ExMAS/data/configs/default.json')  # load the default
+def pipeline():
+    params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
 
     from ExMAS.utils import inData as inData
 
@@ -338,10 +362,10 @@ if __name__ == "__main__":
         params.multi_stop_WtS = 1
         params.multistop_discount = 0.98
         params.second_level_shared_discount = ((1 - params.s2s_discount) - (1 - params.multistop_discount)) / (
-                    1 - params.s2s_discount)
+                1 - params.s2s_discount)
         params.without_matching = False
     else:
-        params.nP = 300  # number of trips
+        params.nP = 500  # number of trips
         params.simTime = 0.5  # per simTime hours
         params.mode_choice_beta = -0.5  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
@@ -352,100 +376,118 @@ if __name__ == "__main__":
         params.pax_delay = 0  # extra seconds for each pickup and drop off
         params.walk_threshold = 400  # maximal walking distance (per origin or destination)
         params.price = 1.5  # per kilometer fare
-        params.shared_discount = 0.2  # discount for door to door pooling
+        params.shared_discount = 0.33  # discount for door to door pooling
         params.s2s_discount = 0.66  # discount for stop to stop pooling
-
-        params.speeds.ride = 8
+        params.speeds.ride = 7
 
         params.multi_stop_WtS = 1  # willingness to share in multi-stop pooling (now lowe)
-        params.multistop_discount = 0.85  # discount for multi-stop
+        params.multistop_discount = 0.8  # discount for multi-stop
         params.second_level_shared_discount = ((1 - params.s2s_discount) - (1 - params.multistop_discount)) / (
-                    1 - params.s2s_discount)
+                1 - params.s2s_discount)
         # how much we reduce multi-stop trip related to stop-to-stop
         params.without_matching = False  # we do not do matching now
 
     inData.params = params  # store params internally
 
     inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the graph
-
-    inData = ExMAS.utils.generate_demand(inData, params)  # generate demand of requests
-
+    if DEBUG:
+        inData = ExMAS.utils.generate_demand(inData, params)  # generate demand of requests
+    else:
+        inData = ExMAS.utils.load_albatross_csv(inData, params)
+    # I ExMAS d2d
     inData = ExMAS.main(inData, params, plot=False)  # compute door-to-door pooled rides
     inData.logger.warn('ExMAS generated {} rides'.format(inData.sblts.rides.shape[0]))
 
+    # prepare for transitize
     inData = prepare_transitize(inData, params)  # prepare data structures to transitize pooled rides
 
-    # main loop s2s
-    inData.transitize.first_level_requests = inData.sblts.requests.copy()  # store first level requests
-    inData.transitize.first_level_rides = inData.sblts.rides.copy()  # store private and d2d rides
-
-    # main loop
+    # II ExMAS s2s
     to_swifter = inData.sblts.rides[inData.sblts.rides.degree != 1]
-    from_swifter = to_swifter.swifter.apply(lambda x: transitize(inData, x), axis = 1)
-    inData.transitize.second_level_requests = from_swifter
+    from_swifter = to_swifter.apply(lambda x: transitize(inData, x), axis=1)  # main
+    # from_swifter = to_swifter.swifter.apply(lambda x: transitize(inData, x), axis = 1)
+    inData.transitize.request2 = from_swifter
 
-    inData.transitize.rm = pd.concat(
-        inData.transitize.second_level_requests[inData.transitize.second_level_requests.transitizable].df.values)
+    if inData.transitize.request2[inData.transitize.request2.transitizable].shape[0] > 0:
+        inData.transitize.rm = pd.concat(
+            inData.transitize.request2[inData.transitize.request2.transitizable].df.values)
     inData.transitize.rm['pax_id'] = inData.transitize.rm.index.copy()
-    # for i, ride in inData.sblts.rides.iterrows():  # loop over rides
-    #     inData.transitize.second_level_rides[ride.name] = transitize(inData, ride, plot=False)  # see if it can be tranzitizabled
-    #     if inData.transitize.second_level_rides[ride.name]['transitizable']:  # if so, add resulting dataframe for rm matrix
-    #         inData.transitize.rm.append(inData.transitize.second_level_rides[ride.name]['df'])
 
-    inData.transitize.second_level_requests = inData.transitize.second_level_requests[
-        inData.transitize.second_level_requests['efficient']]
-    inData.transitize.second_level_requests = inData.transitize.second_level_requests.apply(pd.to_numeric,
-                                                                                            errors='ignore')
+    inData.transitize.request2 = inData.transitize.request2[
+        inData.transitize.request2['efficient']]
+    inData.transitize.request2 = inData.transitize.request2.apply(pd.to_numeric,
+                                                                  errors='ignore')
+
+    if inData.transitize.request2.shape[0] == 0:
+        print('no transitizing')
+        return False
+
     # results of s2s
-    inData.sblts.requests.to_csv('requests.csv')
-    inData.transitize.second_level_requests.to_csv('second_level_requests.csv')
-    inData.transitize.rm.to_csv('transitized_rm.csv')
-    inData.transitize.first_level_rides.to_csv('first_level_rides.csv')
+    selected_s2s = inData.solution1.transitize.index & inData.transitize.requests2.index
+    s2s_report = inData.transitize.rm[inData.transitize.rm.ride.isin(selected_s2s)][[
+        'orig_walk_time', 'dest_walk_time', 's2s_ttrav', 'u_s2s', 'dist']].sum()
+    print(s2s_report)
+    inData.transitize.requests2.loc[selected_s2s][['dist', 'ttrav']]
 
+    inData.transitize.rm.to_csv('{}_transitized_rm.csv'.format(EXPERIMENT_NAME))
 
     inData.logger.warn('Transitizing: \t{} rides '
                        '\t{} transitizable '
-                       '\t{} efficient'.format(inData.transitize.first_level_rides.shape[0],
-                                               inData.transitize.second_level_requests[inData.transitize.second_level_requests.transitizable].shape[0],
-                                               inData.transitize.second_level_requests.shape[0]))
+                       '\t{} efficient'.format(inData.transitize.rides1.shape[0],
+                                               inData.transitize.request2[
+                                                   inData.transitize.request2.transitizable].shape[0],
+                                               inData.transitize.request2.shape[0]))
 
-    inData.transitize.second_level_requests['indexes_set'] = inData.transitize.second_level_requests.apply(lambda x: set(x.indexes),axis=1)
+    inData.transitize.request2['indexes_set'] = inData.transitize.request2.apply(lambda x: set(x.indexes), axis=1)
 
-    inData = list_unmergables(inData) # list which second level requests cannot be pooled (have the same travellers)
+    inData = list_unmergables(inData)  # list which second level requests cannot be pooled (have the same travellers)
 
-    inData.transitize.second_level_requests['pax_id'] = inData.transitize.second_level_requests.index.copy()
+    inData.transitize.request2['pax_id'] = inData.transitize.request2.index.copy()
 
     # set the indexes of first level rides in the second level rides
-    inData.transitize.second_level_requests['low_level_indexes'] = inData.transitize.second_level_requests.apply(lambda x: inData.sblts.rm[inData.sblts.rm.ride == x.name].traveller.to_list(),
-                                       axis=1)
+    inData.transitize.request2['low_level_indexes'] = inData.transitize.request2.apply(
+        lambda x: inData.transitize.rm[inData.transitize.rm.ride == x.name].traveller.to_list(),
+        axis=1)
 
-    inData.requests = inData.transitize.second_level_requests # set the new requests for ExMAS
+    inData.requests = inData.transitize.requests2  # set the new requests for ExMAS
 
     # set parameters for the second level of ExMAS
     params.shared_discount = params.second_level_shared_discount
     params.WtS = params.multi_stop_WtS
 
     params.reset_ttrav = False  # so that travel times are not divided by avg_speed again
-    params.VoT_std = False #
+    params.VoT_std = False  #
     params.make_assertion_matching = False
     params.make_assertion_pairs = False
     params.process_matching = False
     params.without_matching = True
 
-    inData.transitize.second_level_requests.to_csv('second_level_requests.csv')
+    inData.transitize.requests2.to_csv('requests2.csv')
 
-    second_level_inData = ExMAS.main(inData, params, plot=False)
+    inData2 = ExMAS.main(inData, params, plot=False)
+    inData.transitize.rides2 = inData2.sblts.rides.copy()
 
-    #update indexes looking at travellers in the first level rides
-    second_level_inData.sblts.rides['indexes'] = second_level_inData.sblts.rides.apply(
-        lambda x: sum(inData.transitize.second_level_requests.loc[x.indexes].low_level_indexes.to_list(), []), axis=1)
+    # update indexes looking at travellers in the first level rides
+    inData.transitize.rides2['indexes'] = inData.transitize.rides2.apply(
+        lambda x: sum(inData.transitize.requests2.loc[x.indexes].low_level_indexes.to_list(), []), axis=1)
 
-    inData.sblts.rides = pd.concat([inData.transitize.first_level_rides, inData.sblts.rides])
-    inData.sblts.requests = inData.transitize.first_level_requests
+    inData.transitize.rides_both = pd.concat([inData.transitize.rides1, inData.transitize.rides2])
+
+    inData.sblts.rides = inData.transitize.rides_both
+    inData.sblts.requests = inData.transitize.requests1
     inData.sblts.rides.to_csv('both_level_rides.csv')
 
-
-    second_level_inData.sblts.rides.to_csv('second_level_rides.csv')
+    inData2.sblts.rides.to_csv('second_level_rides.csv')
 
     inData = matching(inData, params)
     inData.sblts.schedule.to_csv('solution.csv')
+
+
+if __name__ == "__main__":
+    DEBUG = True
+    EXPERIMENT_NAME = 'AMSTERDAM500'
+
+    cwd = os.getcwd()
+    os.chdir(os.path.join(cwd, '..'))
+    pipeline()
+
+

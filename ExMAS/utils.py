@@ -399,7 +399,7 @@ def load_albatross_csv(_inData, _params, sample=True):
     df = pd.read_csv(os.path.join(_params.paths.albatross,
                                   _params.city.split(",")[0] + "_requests.csv"),
                      index_col='Unnamed: 0')
-    print(df.shape)
+    size = df.shape[0]
     df['treq'] = pd.to_datetime(df['treq'])
     df.treq = df.treq + (_params.t0.date() - df.treq.iloc[0].date())
     df['tarr'] = pd.to_datetime(df['tarr'])
@@ -412,16 +412,23 @@ def load_albatross_csv(_inData, _params, sample=True):
     df = df[df.dist < _params.dist_threshold]
     df = df[df.dist > _params.get("min_dist",0)]
 
-
     if sample:
         df = df.sample(_params.nP)
 
     df['ttrav_alb'] = pd.to_timedelta(df.ttrav)
 
     df['ttrav'] = df.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
+    df['pax_id'] = df.index.copy()
     _inData.requests = df
     _inData.passengers = generic_generator(generate_passenger, _params.nP).reindex(_inData.requests.index)
     _inData.passengers.pos = _inData.requests.origin
+    if _inData.get("logger", False):
+        _inData.logger.info('{} trips generated from dataset of {} records. '
+                            'Time: [{}-{}] mean distance {}'.format(_inData.requests.shape[0],
+                                                                    size,
+                                                                     _inData.requests.treq.min(),
+                                                                     _inData.requests.treq.max(),
+                                                                     _inData.requests.dist.mean()))
 
     return _inData
 
