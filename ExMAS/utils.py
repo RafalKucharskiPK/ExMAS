@@ -112,7 +112,10 @@ def get_config(path, root_path=None):
     with open(path) as json_file:
         data = json.load(json_file)
         config = DotMap(data)
-    config['t0'] = pd.Timestamp('15:00')
+    if 't0' not in config.keys():
+        config['t0'] = pd.Timestamp('15:00')
+    else:
+        config['t0'] = pd.Timestamp(config['t0'])
 
     if root_path is not None:
         config.paths.G = os.path.join(root_path, config.paths.G)  # graphml of a current .city
@@ -296,16 +299,30 @@ def networkstats(inData):
     return ret
 
 def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize = 10, figsize = (25,25)):
+    """
+    plots rides on a map
+    :param inData: container with:
+        inData.G - road graph
+        inData.sblts.requests - trips
+        inData.sblts.rides - shared rides
+    :param ride_indexes: indexes of rides to plot
+    :param light: if you want to make map ligthers (annotations line widths)
+    :param m_size: marker size
+    :param lw:
+    :param fontsize:
+    :param figsize:
+    :return:
+    """
     import seaborn as sns
 
     from matplotlib.collections import LineCollection
 
     def make_schedule(t, r):
+        # creates a sequence of stops for a ride
         columns = ['node', 'times', 'req_id', 'od']
         degree = 2 * len(t.indexes_orig)
         df = pd.DataFrame(None, index=range(degree), columns=columns)
         x = t.indexes_orig
-        print(x)
         s = [r.loc[i].origin for i in x] + [r.loc[i].destination for i in x]
         df.node = pd.Series(s)
         df.req_id = x + t.indexes_dest
@@ -315,7 +332,7 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
 
 
     def add_route(ax, route, color='grey', lw=2, alpha=0.5):
-        # plots route on the graph alrready plotted on ax
+        # plots route on the graph (already plotted on ax)
         edge_nodes = list(zip(route[:-1], route[1:]))
         lines = []
         for u, v in edge_nodes:
@@ -338,14 +355,12 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
         lc = LineCollection(lines, colors=color, linewidths=lw, alpha=alpha, zorder=3)
         ax.add_collection(lc)
 
-    s = inData.sblts.rides
-    r = inData.sblts.requests
-    G = inData.G
+    s = inData.sblts.rides  # input
+    r = inData.sblts.requests  # input
+    G = inData.G  # input
 
     ts = [make_schedule(s.iloc[ride_index],r) for ride_index in ride_indexes]
-    # t1 = make_schedule(s.iloc[1], r)
-    # t2 = make_schedule(s[s.kind == 20].iloc[1], r)
-    #t3 = make_schedule(s[s.kind == 31].iloc[3], r)
+
 
 
 
@@ -407,10 +422,20 @@ def load_albatross_csv(_inData, _params, sample=True):
     # sample within simulation time
     df = df[df.treq.dt.hour >= _params.t0.hour]
     df = df[df.treq.dt.hour <= (_params.t0.hour + _params.simTime)]
+    if _params.simTime < 1:
+        df = df[df.treq.dt.minute <= ( _params.simTime*60)]
+
 
     df['dist'] = df.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
     df = df[df.dist < _params.dist_threshold]
     df = df[df.dist > _params.get("min_dist",0)]
+
+    df = df[~df.duplicated(subset=['origin', 'destination', 'treq'], keep=False)]
+    df = df[~df.duplicated(subset=['origin'], keep=False)]
+    df = df[~df.duplicated(subset=['destination'], keep=False)]
+    print(df.shape)
+
+
 
     if sample:
         df = df.sample(_params.nP)
@@ -917,4 +942,15 @@ def make_traveller_ride_matrix(inData):
     return multis
 
 
+def read_csv_lists(df, cols=None):
+    # reads lists from csv as lists
+    if cols is None:
+        cols = ['indexes', 'indexes_dest', 'indexes_orig', 'u_paxes', 'times', 'unmergables', 'ttravs']
+    for col in cols:
+        if col in df.columns:
+            try:
+                df[col] = df[col].apply(lambda x: json.loads(x))
+            except:
+                pass
+    return df
 

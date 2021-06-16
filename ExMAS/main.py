@@ -669,7 +669,7 @@ def extend_degree(_inData, params, degree):
 
     _inData.sblts.R[degree + 1] = df # store output
     _inData.sblts.rides = pd.concat([_inData.sblts.rides, df], sort=False)
-    if df.shape[0] > 0:
+    if params.get('make_assertion_extension', True) and df.shape[0] > 0:
         assert_extension(_inData, params, degree + 1)
 
     return _inData
