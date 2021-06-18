@@ -419,23 +419,27 @@ def pipeline():
         params.without_matching = False
     else:
         params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
-        params.nP = 500  # number of trips
+        params.nP = 600  # number of trips
         params.simTime = 0.2  # per simTime hours
-        params.mode_choice_beta = -0.5  # only to estimate utilities of pickup points
+        params.mode_choice_beta = -0.3  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
         params.VoT_std = params.VoT / 8  # variance of Value of Time
+
         params.speeds.walk = 1.2  # speed of walking (m/s)
+        params.speeds.ride = 7
+
         params.walk_discomfort = 1  # walking discomfort factor
         params.delay_value = 1.2  # delay discomfort factor
         params.pax_delay = 0  # extra seconds for each pickup and drop off
         params.walk_threshold = 400  # maximal walking distance (per origin or destination)
+
         params.price = 1.5  # per kilometer fare
         params.shared_discount = 0.25 # discount for door to door pooling
         params.s2s_discount = 0.66  # discount for stop to stop pooling
-        params.speeds.ride = 7
+        params.multistop_discount = 0.8  # discount for multi-stop
 
         params.multi_stop_WtS = 1  # willingness to share in multi-stop pooling (now lowe)
-        params.multistop_discount = 0.8  # discount for multi-stop
+
         params.second_level_shared_discount = ((1 - params.s2s_discount) - (1 - params.multistop_discount)) / (
                 1 - params.s2s_discount)
         # how much we reduce multi-stop trip related to stop-to-stop
