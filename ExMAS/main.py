@@ -166,11 +166,15 @@ def single_rides(_inData, params):
 
     def utility_PT():
         # utility of trip with PT - not used
-        if params.PT_discount == DotMap() or params.PT_beta == DotMap():
+        if params.get("PT_discount") is None or params.get("PT_beta") is None:
             return 999999
         else:
             return params.price * (1 - params.PT_discount) * req.dist / 1000 + req.VoT * params.PT_beta * req.timePT
 
+    #prepare data structures
+    _inData.sblts = DotMap(_dynamic=False)
+    _inData.sblts.log = DotMap(_dynamic=False)
+    _inData.sblts.log.sizes = DotMap(_dynamic=False)
     # prepare requests
     req = _inData.requests.copy().sort_index()
     if params.get('reset_ttrav',True):
@@ -179,10 +183,14 @@ def single_rides(_inData, params):
         req.treq = (req.treq - t0).dt.total_seconds().astype(int)  # recalc times for seconds starting from zero
         req.ttrav = req.ttrav.dt.total_seconds().divide(params.avg_speed).astype(int)  # recalc travel times using speed
 
-    if params.get('VoT_std', False):
-        req['VoT'] = normal(params.VoT, params.VoT_std, params.nP)  # normally distributed Value of Time
+    if 'VoT' not in req.columns:
+        if params.get('VoT_std', False):
+            req['VoT'] = normal(params.VoT, params.VoT_std, params.nP)  # normally distributed Value of Time
+        else:
+            req['VoT'] = params.VoT  # heterogeneity not applied
     else:
-        req['VoT'] = params.VoT  # heterogeneity not applied
+        _inData.logger.warn('VoT predefined')
+
 
     req['delta'] = f_delta()  # assign maximal delay in seconds
     req['u'] = params.price * req.dist / 1000 + req.VoT * req.ttrav

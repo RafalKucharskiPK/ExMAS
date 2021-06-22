@@ -17,7 +17,7 @@ def get_centers():
 
 def search_space_csvs():
         # system settings analysis
-        space = DotMap()
+        space = DotMap(_dynamic=False)
         path = "ExMAS/spinoffs/potential/requests"
 
         space.requests = glob.glob(path + "/requests_*.csv")
@@ -25,7 +25,7 @@ def search_space_csvs():
         return space
 
 def search_space_requests():
-    space = DotMap()
+    space = DotMap(_dynamic=False)
     space.nP = [500,1000,2000]
     space.nCenters = [1, 2, 3, 4]
     space.gammdist_shape = [1.5, 2, 2.5, 4, 6]

@@ -19,7 +19,7 @@ from osmnx.distance import get_nearest_node
 import matplotlib.pyplot as plt
 
 # DataFrame skeletons
-inData = DotMap()
+inData = DotMap(_dynamic=False)
 inData['passengers'] = pd.DataFrame(columns=['id', 'pos', 'status'])
 inData.passengers = inData.passengers.set_index('id')
 inData['requests'] = pd.DataFrame(
@@ -111,7 +111,7 @@ def get_config(path, root_path=None):
     # use as: params = get_config(config.json)
     with open(path) as json_file:
         data = json.load(json_file)
-        config = DotMap(data)
+        config = DotMap(data,_dynamic=False)
     if 't0' not in config.keys():
         config['t0'] = pd.Timestamp('15:00')
     else:
@@ -298,7 +298,8 @@ def networkstats(inData):
     ret = DotMap({'center': nearest, 'radius': inData.skim[nearest].quantile(0.75)})
     return ret
 
-def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize = 10, figsize = (25,25)):
+
+def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize=10, figsize=(25, 25)):
     """
     plots rides on a map
     :param inData: container with:
@@ -330,7 +331,6 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
         df.od = pd.Series(['o'] * len(t.indexes_orig) + ['d'] * len(t.indexes_orig))
         return df
 
-
     def add_route(ax, route, color='grey', lw=2, alpha=0.5):
         # plots route on the graph (already plotted on ax)
         edge_nodes = list(zip(route[:-1], route[1:]))
@@ -359,19 +359,15 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
     r = inData.sblts.requests  # input
     G = inData.G  # input
 
-    ts = [make_schedule(s.iloc[ride_index],r) for ride_index in ride_indexes]
-
-
-
+    ts = [make_schedule(s.iloc[ride_index], r) for ride_index in ride_indexes]
 
     G = inData.G
     fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, edge_linewidth=0.3,
                             show=False, close=False,
-                            edge_color='grey',  bgcolor='white')
+                            edge_color='grey', bgcolor='white')
 
-    #colors = {1: 'navy', 2: 'teal', 3: 'maroon', 4: 'black', 5: 'green', 6:'teal'}
-    colors = sns.color_palette("Set2",6)
-
+    # colors = {1: 'navy', 2: 'teal', 3: 'maroon', 4: 'black', 5: 'green', 6:'teal'}
+    colors = sns.color_palette("Set2", 6)
 
     for t in ts:
 
@@ -386,10 +382,10 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
             d = r[r.od == 'd'].iloc[0].node
 
             if not light:
-                ax.annotate('o' + str(i), (G.nodes[o]['x'] * 1.0001, G.nodes[o]['y'] * 1.00001), fontsize = fontsize,
-                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
-                ax.annotate('d' + str(i), (G.nodes[d]['x'] * 1.0001, G.nodes[d]['y'] * 1.00001), fontsize = fontsize,
-                    bbox = dict(facecolor='white', alpha=0.7, edgecolor='none'))
+                ax.annotate('o' + str(i), (G.nodes[o]['x'] * 1.0001, G.nodes[o]['y'] * 1.00001), fontsize=fontsize,
+                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+                ax.annotate('d' + str(i), (G.nodes[d]['x'] * 1.0001, G.nodes[d]['y'] * 1.00001), fontsize=fontsize,
+                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
             route = nx.shortest_path(G, o, d, weight='length')
             add_route(ax, route, color='black', lw=lw / 2, alpha=0.3)
             ax.scatter(G.nodes[o]['x'], G.nodes[o]['y'], s=m_size, c=[colors[deg]], marker='o')
@@ -403,7 +399,7 @@ def plot_map_rides(inData, ride_indexes, light=True, m_size=30, lw=3, fontsize =
         for route in routes:
             add_route(ax, route, color=[colors[deg]], lw=lw, alpha=0.7)
     plt.tight_layout()
-    plt.savefig('map.png', dpi = 300)
+    plt.savefig('map.png', dpi=300)
 
 
 def load_albatross_csv(_inData, _params, sample=True):
@@ -415,7 +411,7 @@ def load_albatross_csv(_inData, _params, sample=True):
                                   _params.city.split(",")[0] + "_requests.csv"),
                      index_col='Unnamed: 0')
     size = df.shape[0]
-    df['treq'] = pd.to_datetime(df['treq'])
+    df['treq'] = pd.to_datetime(df['treq']) + pd.Timedelta(seconds=random.randint(0, 60))
     df.treq = df.treq + (_params.t0.date() - df.treq.iloc[0].date())
     df['tarr'] = pd.to_datetime(df['tarr'])
     df.tarr = df.tarr + (_params.t0.date() - df.tarr.iloc[0].date())
@@ -423,19 +419,15 @@ def load_albatross_csv(_inData, _params, sample=True):
     df = df[df.treq.dt.hour >= _params.t0.hour]
     df = df[df.treq.dt.hour <= (_params.t0.hour + _params.simTime)]
     if _params.simTime < 1:
-        df = df[df.treq.dt.minute <= ( _params.simTime*60)]
-
+        df = df[df.treq.dt.minute <= (_params.simTime * 60)]
 
     df['dist'] = df.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
     df = df[df.dist < _params.dist_threshold]
-    df = df[df.dist > _params.get("min_dist",0)]
+    df = df[df.dist > _params.get("min_dist", 0)]
 
     df = df[~df.duplicated(subset=['origin', 'destination', 'treq'], keep=False)]
     df = df[~df.duplicated(subset=['origin'], keep=False)]
     df = df[~df.duplicated(subset=['destination'], keep=False)]
-    print(df.shape)
-
-
 
     if sample:
         df = df.sample(_params.nP)
@@ -451,9 +443,9 @@ def load_albatross_csv(_inData, _params, sample=True):
         _inData.logger.info('{} trips generated from dataset of {} records. '
                             'Time: [{}-{}] mean distance {}'.format(_inData.requests.shape[0],
                                                                     size,
-                                                                     _inData.requests.treq.min(),
-                                                                     _inData.requests.treq.max(),
-                                                                     _inData.requests.dist.mean()))
+                                                                    _inData.requests.treq.min(),
+                                                                    _inData.requests.treq.max(),
+                                                                    _inData.requests.dist.mean()))
 
     return _inData
 
@@ -539,7 +531,6 @@ def requests_to_geopandas(inData, filename=None):
 def synthetic_demand_poly(_inData, _params=None):
     from random import seed
     from scipy.stats import gamma as gamma_random
-
 
     if _params.gammdist_shape == 0:
         _params.gammdist_shape = 1
@@ -892,6 +883,7 @@ def make_graph(requests, rides,
             plt.savefig(figname)
     return G
 
+
 def make_traveller_ride_matrix(inData):
     """
     creates a ride-traveller mutliindex matrix.
@@ -910,7 +902,6 @@ def make_traveller_ride_matrix(inData):
         deps = [r.times[0]]
         for d in r.times[1:r.degree]:
             deps.append(deps[-1] + d)  # departure times
-        t = inData.sblts.requests
         return deps
 
     inData.sblts.rides['deps'] = inData.sblts.rides.apply(calc_deps, axis=1)
@@ -938,7 +929,8 @@ def make_traveller_ride_matrix(inData):
     multis['shared'] = multis.degree > 1
     multis['ride_time'] = multis.u_veh
     multis = multis[
-        ['ride', 'traveller', 'shared', 'degree', 'treq', 'ride_time', 'dist', 'ttrav', 'ttrav_sh', 'delay','u', 'u_sh']]
+        ['ride', 'traveller', 'shared', 'degree', 'treq', 'ride_time', 'dist', 'ttrav', 'ttrav_sh', 'delay', 'u',
+         'u_sh']]
     return multis
 
 
@@ -953,4 +945,3 @@ def read_csv_lists(df, cols=None):
             except:
                 pass
     return df
-

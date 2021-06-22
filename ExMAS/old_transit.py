@@ -154,10 +154,13 @@ def transitize(inData, ride, trace=False):
     if ret['efficient']:
         ret['ttrav'] = ret['df'].s2s_ttrav.max()
         ret['u_veh'] = ret['ttrav']
+        ret['times'] = [ret['treq'],ret['df'].s2s_ttrav.max()]
         ret['dist'] = inData.skims.dist.loc[ret['origin'], ret['destination']]
         ret['orig_walk_time'] = ret['df'].orig_walk_time.sum()
         ret['dest_walk_time'] = ret['df'].dest_walk_time.sum()
         ret['u_pax'] = ret['df'].u_s2s.sum()
+        ret['u_paxes'] = ret['df'].u_s2s.values
+
 
     inData.logger.warn('ride: {} \t Efficiency check: {} \t {}/{} efficient'.format(ride.name,
                                                                                     ret['efficient'],
@@ -178,7 +181,7 @@ def process_level1(inData, params):
     inData.sblts.rides['degree'] = inData.sblts.rides.apply(lambda x: len(x.indexes), axis=1)
     inData.sblts.rides.to_csv('{}_ExMASrides1.csv'.format(EXPERIMENT_NAME))
 
-    inData.skims = DotMap()  # skim matrices of the network
+    inData.skims = DotMap(_dynamic=False)  # skim matrices of the network
     inData.skims.dist = inData.skim.copy()  # distance (meters)
     inData.skims.ride = inData.skims.dist.divide(params.speeds.ride).astype(int).T  # travel time (seconds)
     inData.skims.walk = inData.skims.dist.divide(params.speeds.walk).astype(int).T  # walking time (seconds)
@@ -205,6 +208,11 @@ def process_level1(inData, params):
     inData.transitize.rm1['sum_exp'] = inData.transitize.rm1['exp_u_d2d'] + inData.transitize.rm1[
         'exp_u_private']  # to speed up calculations
 
+
+    inData.transitize.rm = inData.transitize.rm1.copy()[['ride', 'traveller', 'degree', 'dist', 'ttrav', 'delay', 'u_sh']]
+    inData.transitize.rm['u'] = inData.transitize.rm['u_sh']
+    del inData.transitize.rm['u_sh']
+
     # store d2d results
     inData.transitize.requests1 = inData.sblts.requests.copy()  # store requests
 
@@ -225,7 +233,7 @@ def process_level1(inData, params):
     inData.transitize.rides = inData.transitize.rides[
         ['indexes', 'indexes_orig','indexes_dest',
          'u_pax', 'u_veh', 'kind',
-         'ttrav',
+         'ttrav', 'times', 'u_paxes',
          'orig_walk_time', 'dest_walk_time',
          'solution_0', 'solution_1']]
 
@@ -245,6 +253,7 @@ def level_2(inData, params):
         inData.transitize.rm2 = pd.concat(
             inData.transitize.requests2[inData.transitize.requests2.transitizable].df.values)
     inData.transitize.rm2['pax_id'] = inData.transitize.rm2.index.copy()
+    inData.transitize.rm2['traveller'] = inData.transitize.rm2.index.copy()
 
     inData.transitize.requests2 = inData.transitize.requests2[inData.transitize.requests2['efficient']]
     inData.transitize.requests2 = inData.transitize.requests2.apply(pd.to_numeric, errors='ignore')
@@ -260,7 +269,8 @@ def level_2(inData, params):
                                                    inData.transitize.requests2[
                                                        inData.transitize.requests2.transitizable].shape[0],
                                                    inData.transitize.requests2.shape[0]))
-        #inData.transitize.rm2.to_csv('{}_rm2.csv'.format(EXPERIMENT_NAME))
+        inData.transitize.rm2.to_csv('{}_rm2.csv'.format(EXPERIMENT_NAME))
+
 
         inData.transitize.requests2['indexes_set'] = inData.transitize.requests2.apply(lambda x: set(x.indexes), axis=1)
 
@@ -279,9 +289,17 @@ def level_2(inData, params):
         to_concat['kind'] = 's2s'
         to_concat = to_concat[
             ['indexes', 'u_pax', 'u_veh', 'kind', 'ttrav',
-             'orig_walk_time', 'dest_walk_time',
+             'orig_walk_time', 'dest_walk_time', 'times', 'u_paxes',
              'solution_0', 'solution_1', 'low_level_indexes_set', 'origin', 'destination', 'd2d_reference']]
         inData.transitize.rides = pd.concat([inData.transitize.rides, to_concat]).reset_index()
+
+        to_concat = inData.transitize.rm2
+
+        to_concat['ttrav'] = to_concat['s2s_ttrav']
+
+        inData.transitize.rm = pd.contat([inData.transitize.rm,to_concat[['ride', 'traveller', 'dist',
+                                                                 'ttrav', 'delay', 'u_sh',
+                                                                 'origin_walk_time', 'dest_walk_time', 'delay']]])
 
         inData.transitize.requests2.index = inData.transitize.rides[inData.transitize.rides.kind == 's2s'].index.values
 
@@ -342,15 +360,15 @@ def process_level3(inData):
     inData.transitize.rides3['high_level_indexes'] = inData.transitize.rides3['indexes'].copy()
     inData.transitize.rides3['indexes'] = inData.transitize.rides3.apply(
         lambda x: sum(inData.transitize.requests2.loc[x.indexes].low_level_indexes.to_list(), []), axis=1)
-
-    to_concat = inData.transitize.rides3
+    inData.transitize.rides3['degree'] = inData.transitize.rides3.apply(lambda x: len(x.high_level_indexes), axis=1)
+    to_concat = inData.transitize.rides3[inData.transitize.rides3.degree>1]
     to_concat['solution_0'] = 0
     to_concat['solution_1'] = 0
     to_concat['solution_2'] = 0
     to_concat['kind'] = 'ms'
     to_concat = to_concat[
         ['indexes', 'indexes_orig','indexes_dest', 'high_level_indexes',
-         'u_pax', 'u_veh', 'ttrav', 'kind',
+         'u_pax', 'u_veh', 'ttrav', 'kind', 'times', 'u_paxes',
          'orig_walk_time', 'dest_walk_time',
          'solution_0', 'solution_1', 'solution_2']]
     inData.transitize.rides = pd.concat([inData.transitize.rides, to_concat]).reset_index()
@@ -419,8 +437,8 @@ def pipeline():
         params.without_matching = False
     else:
         params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
-        params.nP = 600  # number of trips
-        params.simTime = 0.2  # per simTime hours
+        params.nP = 700  # number of trips
+        params.simTime = 0.25  # per simTime hours
         params.mode_choice_beta = -0.3  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
         params.VoT_std = params.VoT / 8  # variance of Value of Time
@@ -431,7 +449,7 @@ def pipeline():
         params.walk_discomfort = 1  # walking discomfort factor
         params.delay_value = 1.2  # delay discomfort factor
         params.pax_delay = 0  # extra seconds for each pickup and drop off
-        params.walk_threshold = 400  # maximal walking distance (per origin or destination)
+        params.walk_threshold = 300  # maximal walking distance (per origin or destination)
 
         params.price = 1.5  # per kilometer fare
         params.shared_discount = 0.25 # discount for door to door pooling
@@ -467,7 +485,7 @@ def pipeline():
 
 if __name__ == "__main__":
     DEBUG = False
-    EXPERIMENT_NAME = 'AMS'
+    EXPERIMENT_NAME = 'times'
 
     cwd = os.getcwd()
     os.chdir(os.path.join(cwd, '..'))

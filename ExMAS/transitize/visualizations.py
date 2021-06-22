@@ -176,35 +176,10 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, light=True, label_offs
     return fig, ax
 
 
-def prep_results(PATH, inData=None):
-    # reads directory with csv files and stores them into inData.transitize container
-    # reads lists from csv as lists
-    if inData is None:
-        from ExMAS.utils import inData as inData
-    for file in os.listdir(PATH):
-        if file.endswith(".csv"):
-            inData.transitize[file.split("_")[1][:-4]] = read_csv_lists(
-                pd.read_csv(os.path.join(PATH, file), index_col=0))
-            if "row" in inData.transitize[file.split("_")[1][:-4]].columns:
-                del inData.transitize[file.split("_")[1][:-4]]['row']
-    return inData
 
 
-def make_report(inData):
-    ret = dict()
-    KPIs = ['u_veh', 'u_pax', 'ttrav', 'orig_walk_time', 'dest_walk_time']
-    kinds = ['p','d2d','s2s','ms']
-    for i in [0, 1, 2, 3]:
-        ret[i] = inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1][KPIs].sum()
-        ret[i] = pd.concat([ret[i],
-                            inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1].groupby(
-                                'kind').size()])
-        inds = inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1].indexes
-        ret[i]['test'] = len(sum(inds, [])) == inData.transitize.requests.shape[0]
-        ret[i]['nRides'] = (0 if i == 0 else ret[i-1]['nRides']) + inData.transitize.rides[inData.transitize.rides.kind == kinds[i]].shape[0]
 
-    inData.transitize.report = pd.DataFrame(ret)
-    return inData
+
 
 
 def results_pipeline(PATH='ams'):
