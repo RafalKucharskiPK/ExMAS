@@ -411,7 +411,7 @@ def load_albatross_csv(_inData, _params, sample=True):
                                   _params.city.split(",")[0] + "_requests.csv"),
                      index_col='Unnamed: 0')
     size = df.shape[0]
-    df['treq'] = pd.to_datetime(df['treq']) + pd.Timedelta(seconds=random.randint(0, 60))
+    df['treq'] = pd.to_datetime(df['treq'])
     df.treq = df.treq + (_params.t0.date() - df.treq.iloc[0].date())
     df['tarr'] = pd.to_datetime(df['tarr'])
     df.tarr = df.tarr + (_params.t0.date() - df.tarr.iloc[0].date())
@@ -420,14 +420,18 @@ def load_albatross_csv(_inData, _params, sample=True):
     df = df[df.treq.dt.hour <= (_params.t0.hour + _params.simTime)]
     if _params.simTime < 1:
         df = df[df.treq.dt.minute <= (_params.simTime * 60)]
+    df['treq'] = df['treq'].apply(lambda x: x + pd.Timedelta(seconds=random.randint(0, 60)))
 
     df['dist'] = df.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
+
     df = df[df.dist < _params.dist_threshold]
     df = df[df.dist > _params.get("min_dist", 0)]
 
     df = df[~df.duplicated(subset=['origin', 'destination', 'treq'], keep=False)]
     df = df[~df.duplicated(subset=['origin'], keep=False)]
     df = df[~df.duplicated(subset=['destination'], keep=False)]
+
+
 
     if sample:
         df = df.sample(_params.nP)

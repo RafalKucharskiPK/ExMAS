@@ -266,10 +266,10 @@ def process_level1(inData, params):
 
     # store d2d results
     inData.transitize.requests1 = inData.sblts.requests.copy()  # store requests
-    inData.transitize.requests1.to_csv('{}_requests.csv'.format(EXPERIMENT_NAME))
+
     inData.transitize.rides1 = inData.sblts.rides.copy()  # store d2d rides
     inData.transitize.solution1 = inData.transitize.rides1[inData.transitize.rides1.selected == True].copy()  # useless?
-    inData.transitize.rm1.to_csv('{}_rm1.csv'.format(EXPERIMENT_NAME))  # store ExMAS solution
+
 
     inData.transitize.rides = inData.transitize.rides1.copy()  # output
     inData.transitize.rides['solution_0'] = inData.transitize.rides.apply(lambda x: 1 if x.kind == 1 else 0, axis=1)
@@ -318,7 +318,7 @@ def level_2(inData, params):
                                                    inData.transitize.requests2[
                                                        inData.transitize.requests2.transitizable].shape[0],
                                                    inData.transitize.requests2.shape[0]))
-        inData.transitize.rm2.to_csv('{}_rm2.csv'.format(EXPERIMENT_NAME))  # useless?
+
 
         inData.transitize.requests2['indexes_set'] = inData.transitize.requests2.apply(lambda x: set(x.indexes), axis=1)
 
@@ -349,8 +349,6 @@ def level_2(inData, params):
         to_concat = to_concat[['ride', 'traveller', 'dist',
                                'ttrav', 'delay', 'u',
                                'orig_walk_time', 'dest_walk_time']]  # output for rm2
-        to_concat.to_csv('to_concat.csv')
-        inData.transitize.rides.to_csv('c_rides.csv')
 
 
         def get_ride_index(row):
@@ -404,7 +402,7 @@ def level_3(inData, params):
     inData = process_level3(inData, inData_copy)
 
     inData = matching(inData, params)  # final solution
-    # inData.sblts.requests.to_csv('{}_requestsExMAS2.csv'.format(EXPERIMENT_NAME))
+
 
     inData.transitize.rides['solution_3'] = inData.sblts.rides.selected.values
 
@@ -417,11 +415,11 @@ def process_level3(inData, inData_copy):
     inData_copy.sblts.rides['degree'] = inData_copy.sblts.rides.apply(lambda x: len(x.indexes), axis=1)
     inData.transitize.rm3 = ExMAS.utils.make_traveller_ride_matrix(
         inData_copy)  # data frame with two indices: ride - traveller, but now for 2nd level ExMAS
-    inData.transitize.rm3.to_csv('{}_rm3.csv'.format(EXPERIMENT_NAME))
+
 
     inData.transitize.rides3 = inData_copy.sblts.rides.copy() # 'd2d' rides
 
-    inData_copy.sblts.rides.to_csv('{}_ridesExMAS2.csv'.format(EXPERIMENT_NAME))
+
 
 
     for col in ['orig_walk_time', 'dest_walk_time']:
@@ -485,7 +483,50 @@ def list_unmergables(inData):
     return inData
 
 
-def pipeline():
+def pipeline(inData, params, EXPERIMENT_NAME):
+
+
+    inData.params = params  # store params internally
+
+    inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the graph
+
+    if params.DEBUG:
+        inData = ExMAS.utils.generate_demand(inData, params)  # generate demand of requests
+    else:
+        params.inData = ExMAS.utils.load_albatross_csv(inData, params)  # load demand from albatross
+
+    inData = level1(inData, params)  # I ExMAS d2d - rides at: level_0 (kind 'p') level_1 (kind 'd2d')
+
+    inData, params = level_2(inData, params)  # II ExMAS s2s - rides at level_2 (kind 'd2d')
+    if inData.transitize.rides[inData.transitize.rides.kind=='s2s'].shape[0] == 0:
+        inData.logger.warn('No transitable rides, early exit')
+        inData.transitize.rides.to_csv('rides.csv')
+    else:
+        inData, params = level_3(inData, params) # III ExMAS multistop - rides at level_3 (kind 'ms')
+
+    inData.logger.warn('Processing results')
+    inData = process_transitize(inData, params)
+
+    # inData_copy.sblts.rides.to_csv('{}_ridesExMAS2.csv'.format(params.EXPERIMENT_NAME))
+    # inData.sblts.requests.to_csv('{}_requestsExMAS2.csv'.format(params.EXPERIMENT_NAME))
+
+    #inData.transitize.rm1.to_csv('{}_rm1.csv'.format(EXPERIMENT_NAME))  # store ExMAS solution
+    #inData.transitize.rm2.to_csv('{}_rm2.csv'.format(EXPERIMENT_NAME))  # useless?
+    #inData.transitize.rm3.to_csv('{}_rm3.csv'.format(EXPERIMENT_NAME))
+    inData.transitize.requests1.to_csv('{}_requests.csv'.format(EXPERIMENT_NAME))
+    inData.transitize.rides.to_csv('{}_rides.csv'.format(EXPERIMENT_NAME))
+    inData.transitize.rm.to_csv('{}_rm.csv'.format(EXPERIMENT_NAME))
+
+    return inData.transitize
+
+
+if __name__ == "__main__":
+    DEBUG = True
+    EXPERIMENT_NAME = 'dbg'
+
+    cwd = os.getcwd()
+    os.chdir(os.path.join(cwd, '../..'))
+
     from ExMAS.utils import inData as inData
 
     # BIGGER
@@ -495,7 +536,10 @@ def pipeline():
         params.nP = 200
         params.pax_delay = 0
         params.simTime = 0.2
+        params.speeds = DotMap()
+
         params.speeds.ride = 8
+        params.min_dist = 2000
         params.avg_speed = params.speeds.ride
         params.mode_choice_beta = -0.5  # only to estimate utilities
         params.speeds.walk = 1.2
@@ -510,13 +554,18 @@ def pipeline():
         params.second_level_shared_discount = ((1 - params.s2s_discount) - (1 - params.multistop_discount)) / (
                 1 - params.s2s_discount)
         params.without_matching = False
+        params.DEBUG = DEBUG
+        #params.t0='17:00'
+        #ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit_debug.json')  # load the default
     else:
         params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
-        params.nP = 500  # number of trips
-        params.simTime = 0.25  # per simTime hours
+        params.nP = 1000  # number of trips
+        params.simTime = 0.5  # per simTime hours
         params.mode_choice_beta = -0.3  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
         params.VoT_std = params.VoT / 8  # variance of Value of Time
+
+        params.speeds = DotMap()
 
         params.speeds.walk = 1.2  # speed of walking (m/s)
         params.speeds.ride = 8
@@ -525,7 +574,7 @@ def pipeline():
         params.walk_discomfort = 1  # walking discomfort factor
         params.delay_value = 1.2  # delay discomfort factor
         params.pax_delay = 0  # extra seconds for each pickup and drop off
-        params.walk_threshold = 400  # maximal walking distance (per origin or destination)
+        params.walk_threshold = 360  # maximal walking distance (per origin or destination)
 
         params.price = 1.5  # per kilometer fare
         params.shared_discount = 0.25  # discount for door to door pooling
@@ -538,37 +587,9 @@ def pipeline():
                 1 - params.s2s_discount)
         # how much we reduce multi-stop trip related to stop-to-stop
         params.without_matching = False  # we do not do matching now
-
-    inData.params = params  # store params internally
-
-    inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the graph
-
-    if DEBUG:
-        inData = ExMAS.utils.generate_demand(inData, params)  # generate demand of requests
-    else:
-        inData = ExMAS.utils.load_albatross_csv(inData, params)  # load demand from albatross
-
-    inData = level1(inData, params)  # I ExMAS d2d - rides at: level_0 (kind 'p') level_1 (kind 'd2d')
-
-    inData, params = level_2(inData, params)  # II ExMAS s2s - rides at level_2 (kind 'd2d')
-    if inData.transitize.rides[inData.transitize.rides.kind=='s2s'].shape[0] == 0:
-        inData.logger.warn('No transitable rides, early exit')
-        inData.transitize.rides.to_csv('rides.csv')
-    else:
-        inData, params = level_3(inData, params) # III ExMAS multistop - rides at level_3 (kind 'ms')
+        params.DEBUG = DEBUG
+        #params.t0='17:00'
+        #ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit.json')  # load the default
 
 
-    inData = process_transitize(inData, params)
-    inData.transitize.rides.to_csv('{}_rides.csv'.format(EXPERIMENT_NAME))
-    inData.transitize.rm.to_csv('{}_rm.csv'.format(EXPERIMENT_NAME))
-
-    return inData.transitize
-
-
-if __name__ == "__main__":
-    DEBUG = True
-    EXPERIMENT_NAME = 'dbg'
-
-    cwd = os.getcwd()
-    os.chdir(os.path.join(cwd, '../..'))
-    pipeline()
+    pipeline(inData, params, EXPERIMENT_NAME)
