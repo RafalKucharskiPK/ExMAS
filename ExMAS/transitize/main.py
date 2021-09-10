@@ -485,7 +485,6 @@ def list_unmergables(inData):
 
 def pipeline(inData, params, EXPERIMENT_NAME):
 
-
     inData.params = params  # store params internally
 
     inData = ExMAS.utils.load_G(inData, params, stats=True)  # download the graph
@@ -513,6 +512,7 @@ def pipeline(inData, params, EXPERIMENT_NAME):
     #inData.transitize.rm1.to_csv('{}_rm1.csv'.format(EXPERIMENT_NAME))  # store ExMAS solution
     #inData.transitize.rm2.to_csv('{}_rm2.csv'.format(EXPERIMENT_NAME))  # useless?
     #inData.transitize.rm3.to_csv('{}_rm3.csv'.format(EXPERIMENT_NAME))
+    print(inData.transitize.requests1.columns)
     inData.transitize.requests1.to_csv('{}_requests.csv'.format(EXPERIMENT_NAME))
     inData.transitize.rides.to_csv('{}_rides.csv'.format(EXPERIMENT_NAME))
     inData.transitize.rm.to_csv('{}_rm.csv'.format(EXPERIMENT_NAME))
@@ -521,7 +521,7 @@ def pipeline(inData, params, EXPERIMENT_NAME):
 
 
 if __name__ == "__main__":
-    DEBUG = True
+    DEBUG = False
     EXPERIMENT_NAME = 'dbg'
 
     cwd = os.getcwd()
