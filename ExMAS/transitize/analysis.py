@@ -1,12 +1,26 @@
-from matplotlib.collections import LineCollection
-from ExMAS.utils import plot_map_rides, read_csv_lists
-import osmnx as ox
+"""
+# ExMAS - TRANSITIZE
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+> Module to pool requests to stop-to-stop and multi-stop rides, aka TRANSITIZE
+---
+
+Analyse the results
+
+
+
+----
+Rafał Kucharski, TU Delft,GMUM UJ  2021 rafal.kucharski@uj.edu.pl
+"""
+
+
+
+
+from ExMAS.utils import read_csv_lists
+
 from dotmap import DotMap
 import os
 import pandas as pd
-import networkx as nx
-import seaborn as sns
-import json
+
 
 
 def process_transitize(inData, params):
@@ -19,6 +33,7 @@ def process_transitize(inData, params):
     inData = process_rm_multistop(inData, params)
     inData = assign_solutions(inData)
     inData = determine_fares(inData, params)
+    #inData.transitize.requests = PT_utility(inData.transitize.requests, params)
 
     inData.transitize.rm = inData.transitize.rm.join(
         inData.transitize.rides[['solution_0', 'solution_1', 'solution_2', 'solution_3']], on='ride')
@@ -53,7 +68,7 @@ def prep_results(PATH, inData=None, params=None):
             if "row" in inData.transitize[file.split("_")[1][:-4]].columns:
                 del inData.transitize[file.split("_")[1][:-4]]['row']
 
-    rm = inData.transitize.rm.join(inData.transitize.requests1[['VoT', 'origin', 'destination', 'treq']],
+    rm = inData.transitize.rm.join(inData.transitize.requests[['VoT', 'origin', 'destination', 'treq']],
                                    on='traveller')
     rm = rm.join(inData.transitize.rides[['kind']], on='ride')
 
@@ -62,6 +77,7 @@ def prep_results(PATH, inData=None, params=None):
     inData = process_rm_multistop(inData, params)
     inData = assign_solutions(inData)
     inData = determine_fares(inData, params)
+    inData.transitize.requests = PT_utility(inData.transitize.requests, params)
 
     inData.transitize.rm = inData.transitize.rm.join(
         inData.transitize.rides[['solution_0', 'solution_1', 'solution_2', 'solution_3']], on='ride')
@@ -70,7 +86,6 @@ def prep_results(PATH, inData=None, params=None):
 
 
 def assign_solutions(inData):
-    rides = inData.transitize.rides
     requests = inData.transitize.requests1
     for level in [0, 1, 2, 3]:
         ret = dict()
@@ -125,6 +140,21 @@ def process_rm_multistop(inData, params):
 
     inData.transitize.rm = pd.concat([inData.transitize.rm, df])
     return inData
+
+def PT_utility(requests,params):
+    if 'walkDistance' in requests.columns:
+        requests = requests
+        walk_factor = 2
+        wait_factor = 2
+        transfer_penalty = 500
+        requests['u_PT'] = requests.VoT * (walk_factor * requests.walkDistance / params.speeds.walk +
+                                           wait_factor * requests.waitingTime +
+                                           transfer_penalty * requests.transfers + requests.transitTime)
+    return requests
+
+
+
+
 
 
 def determine_fares(inData, params):

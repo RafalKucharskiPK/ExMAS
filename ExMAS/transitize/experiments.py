@@ -1,3 +1,21 @@
+"""
+# ExMAS - TRANSITIZE
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+> Module to pool requests to stop-to-stop and multi-stop rides, aka TRANSITIZE
+---
+
+Run experiments on the parameters grid
+
+
+----
+Rafał Kucharski, TU Delft,GMUM UJ  2021 rafal.kucharski@uj.edu.pl
+"""
+
+
+
+
+
+
 from ExMAS.transitize.main import pipeline
 from dotmap import DotMap
 from ExMAS.experiments import *
@@ -5,8 +23,10 @@ from ExMAS.experiments import *
 
 def space():
     # system settings analysis
-    full_space = DotMap()
-    full_space.nP = [100, 200]
+    space = DotMap()
+    space.nP = [800, 1000, 1200]
+    space.s2s_discount = [0.5, 0.66, 0.75]  # discount for stop to stop pooling
+    space.multistop_discount = [0.8, 0.85, 0.9]
     return full_space
 
 def exploit_search_space_transitize(one_slice, *args):

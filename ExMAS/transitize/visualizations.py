@@ -1,10 +1,24 @@
-from matplotlib.collections import LineCollection
-from ExMAS.utils import plot_map_rides, read_csv_lists
+"""
+# ExMAS - TRANSITIZE
+> Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+> Module to pool requests to stop-to-stop and multi-stop rides, aka TRANSITIZE
+---
+
+Visualize the results
+
+
+
+----
+Rafał Kucharski, TU Delft, GMUM UJ  2021 rafal.kucharski@uj.edu.pl
+"""
+
+
+
 import osmnx as ox
-import os
 import pandas as pd
 import networkx as nx
 import seaborn as sns
+from .analysis import prep_results, make_report
 import json
 
 from matplotlib.collections import LineCollection
@@ -90,6 +104,25 @@ def make_schedule(t, r):
 def plot_d2d(inData, ride_index, fig=None, ax=None,
              light=True, m_size=30, lw=3, fontsize=10, figsize=(25, 25), color='black',
              label_offset=0.0001, plot_shared=True):
+    """
+    Plots on a map (inData.G) a shared Door-to-door ride. To be called after transitize is computed.
+    :param inData: needs to have:
+                    .G - graph from osmnx
+                    .transitize.rides
+                    .transitize.requests
+    :param ride_index: index in inData.transitize.rides to plot
+    :param fig: optional - to pass if matplotlib figure is already created
+    :param ax: optional - to pass if matplotlib figure is axis created
+    :param light: scaling of line weights and node sizes and flag to make annotations
+    :param m_size: size of node
+    :param lw: lightweight
+    :param fontsize:
+    :param figsize:
+    :param color:
+    :param label_offset:
+    :param plot_shared: add base d2d ride to the plot
+    :return:
+    """
     s = inData.transitize.rides  # input
     r = inData.transitize.requests  # input
     G = inData.G  # input
@@ -139,6 +172,19 @@ def plot_d2d(inData, ride_index, fig=None, ax=None,
 
 
 def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, light=True, label_offset=0, fontsize=8, color='blue'):
+    '''
+    plots stop-to-stop ride including stop point (common for all origins) and walking to it
+    :param inData:
+    :param ride_id:
+    :param sizes:
+    :param fig:
+    :param ax:
+    :param light:
+    :param label_offset:
+    :param fontsize:
+    :param color:
+    :return: fig, ax with plotted graph and ride
+    '''
     G = inData.G
     ride = inData.transitize.rides.loc[ride_id]
     requests = inData.transitize.requests
@@ -176,18 +222,8 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, light=True, label_offs
     return fig, ax
 
 
-
-
-
-
-
-
-def results_pipeline(PATH='ams'):
-    inData = prep_results(PATH)
-
-
 def add_route(G, ax, route, color='grey', lw=2, alpha=0.5, linestyle='solid'):
-    # plots route on the graph alrready plotted on ax
+    # plots route on the graph already plotted on ax - reusable
     edge_nodes = list(zip(route[:-1], route[1:]))
     lines = []
     for u, v in edge_nodes:
@@ -211,35 +247,7 @@ def add_route(G, ax, route, color='grey', lw=2, alpha=0.5, linestyle='solid'):
     ax.add_collection(lc)
 
 
-# def plot_ride(inData, ride, sizes=0, fig=None, ax=None, label_offset=0.0005):
-#     G = inData.G
-#     routes = list()
-#     if fig is None:
-#         fig, ax = ox.plot_graph(G, figsize=(25, 25), node_size=sizes, node_color='black', edge_color='grey',
-#                                 bgcolor='white', edge_linewidth=0.3,
-#                                 show=False, close=False)
-#     for i, origin in enumerate(ride.origins):
-#         ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=10, c='red', marker='o')
-#         ax.annotate('{}'.format(ride.indexes[i]),
-#                     (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset)
-#                     , bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'), fontsize=8)
-#
-#         routes.append(nx.shortest_path(G, ride.origins[i], ride.origin, weight='length'))
-#         routes.append(nx.shortest_path(G, ride.destination, ride.destinations[i], weight='length'))
-#     for i, origin in enumerate(ride.destinations):
-#         ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=10, c='blue', marker='o')
-#         ax.annotate('{}'.format(ride.indexes[i]),
-#                     (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset),
-#                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'), fontsize=8)
-#
-#     transit_route = nx.shortest_path(G, ride.origin, ride.destination, weight='length')
-#     add_route(G, ax, transit_route, color='red', lw=4, alpha=0.5)
-#
-#     for route in routes:
-#         add_route(G, ax, route, color='green', lw=4, alpha=0.5)
-#     ax.scatter(G.nodes[ride.origin]['x'], G.nodes[ride.origin]['y'], s=50, c='red', marker='o')
-#     ax.scatter(G.nodes[ride.destination]['x'], G.nodes[ride.destination]['y'], s=50, c='red', marker='o')
-#     return fig, ax
+
 
 if __name__ == "__main__":
     PATH = "../../ams"
