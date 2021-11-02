@@ -24,7 +24,7 @@ import json
 from matplotlib.collections import LineCollection
 
 
-def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
+def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None, fontsize = 10, figsize = (20,20)):
     colors = sns.color_palette("Set2", 6)
     rides = inData.transitize.rides
     requests = inData.transitize.requests
@@ -55,22 +55,22 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
 
     d2d_rides = rides.loc[s2s_rides.d2d_reference.values]
 
-    fig, ax = ox.plot_graph(G, figsize=(20, 20), node_size=0, node_color='black', edge_color='grey',
+    fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, node_color='black', edge_color='grey',
                             bgcolor='white', edge_linewidth=0.2, bbox=bbox,
                             show=False, close=False)
 
     if level == 0:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
-            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=10,
+            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
                                color=colors[i], fig=fig, ax=ax, lw=5, plot_shared=False)
 
     if level>=2:
          for i, s2s_ride in enumerate(s2s_rides.index.values):
-           plot_s2s(inData, int(s2s_ride), fig=fig, ax = ax, color = colors[i], light = False)
+           plot_s2s(inData, int(s2s_ride), fig=fig, ax = ax, color = colors[i], light = False, fontsize = fontsize)
 
     if level ==1:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
-            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=10,
+            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
                                color=colors[i], fig=fig, ax=ax, lw=3, plot_shared=True)
     if level == 3:
 
@@ -85,6 +85,7 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
     if title:
         fig.suptitle(title, size = 20, fontweight='bold')
         fig.tight_layout()
+    return ax
 
 
 def make_schedule(t, r):

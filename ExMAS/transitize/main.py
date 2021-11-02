@@ -486,12 +486,16 @@ def stick_private_to_ms(inData, params):
     :param params:
     :return:
     """
+    import json
     skim = inData.skims.walk
     rides = inData.transitize.rides
+    rides.indexes_dest = rides.indexes_dest.apply(lambda x: json.loads(x) if type(x) == str else x)
+    rides.indexes_orig = rides.indexes_orig.apply(lambda x: json.loads(x) if type(x) == str else x)
 
-    requests = inData.transitize.requests1
+    requests = inData.transitize.requests
     to_be_sticked = rides[(rides.solution_3 == 1) & (rides.kind == 'p')]
     to_stick_to = rides[(rides.solution_3 == 1) & (rides.kind == 'ms')]
+
     ret = dict()
     for i in to_be_sticked.index:  # loop for each private request
         request = requests.loc[i]
@@ -526,26 +530,28 @@ def stick_private_to_ms(inData, params):
             if solution.walk + solution.ride_time < best_to:
                 best_to = solution.walk + solution.ride
                 solution_to = solution
-                solution.ride_time = j
+                solution_to.ride_time = solution.ride_time
 
         u_sticked = params.price * (1 - params.multistop_discount) + \
                     request.VoT * (params.walk_discomfort * solution_to.walk +
                                    solution_to.ride_time +
                                    params.delay_value * solution_to.delay)
-        inData.logger.info(
-            'Request {} best sticked to ride {} '
-            'with walk time {} ride time {} and delay {}'.format(i,
-                                                                 solution_to.ride,
-                                                                 solution_to.walk,
-                                                                 solution_to.ride,
-                                                                 solution_to.delay))
         if u_sticked < request.u_sh:
-            inData.logger.info('\tAtractive {}>{}'.format(u_sticked, request.u_she))
+            inData.logger.info(
+                'Request {} best sticked to ride {} '
+                'with walk time {} ride time {} and delay {}. U: {} U-sticked:{}'.format(i,
+                                                                     solution_to.ride,
+                                                                     solution_to.walk,
+                                                                     solution_to.ride_time,
+                                                                     solution_to.delay, u_sticked, request.u_sh))
+
             ret[i] = (solution_to.ride, solution_to.o, solution_to.d, u_sticked)
         else:
             inData.logger.info('\tInatractive {}>{}'.format(u_sticked, request.u_sh))
 
-    inData.transitize.requests1['solution_4'] = requests.apply(lambda x: ret.get(x.name, x.solution_3))
+    inData.transitize.requests['ride_solution_4'] = inData.transitize.requests.apply(lambda x:
+                                                                                ret.get(x.name, x.ride_solution_3),
+                                                                                axis = 1)
     return inData
 
 
@@ -607,13 +613,17 @@ def pipeline(inData, params, EXPERIMENT_NAME):
     inData.transitize.requests1.to_csv('{}/{}_requests.csv'.format(OUTPATH, EXPERIMENT_NAME))
     inData.transitize.rides.to_csv('{}/{}_rides.csv'.format(OUTPATH, EXPERIMENT_NAME))
     inData.transitize.rm.to_csv('{}/{}_rm.csv'.format(OUTPATH, EXPERIMENT_NAME))
+    #params.t0='17:00'
+    #ExMAS.utils.save_config(params, '{}/{}_params.csv'.format(OUTPATH, EXPERIMENT_NAME))  # load the default
 
     return inData.transitize
 
 
 if __name__ == "__main__":
     DEBUG = False
-    EXPERIMENT_NAME = 'Duze1200_2'
+    EXPERIMENT_NAME = '10min1000_2'
+
+
 
     cwd = os.getcwd()
     os.chdir(os.path.join(cwd, '../..'))
@@ -651,8 +661,8 @@ if __name__ == "__main__":
         # ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit_debug.json')  # load the default
     else:
         params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
-        params.nP = 1200  # number of trips
-        params.simTime = 0.25  # per simTime hours
+        params.nP = 1000  # number of trips
+        params.simTime = 0.166 # per simTime hours
         params.mode_choice_beta = -0.3  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
         params.VoT_std = params.VoT / 8  # variance of Value of Time
@@ -663,7 +673,7 @@ if __name__ == "__main__":
         params.speeds.ride = 8
         params.avg_speed = params.speeds.ride
 
-        params.walk_discomfort = 1  # walking discomfort factor
+        params.walk_discomfort = 1.5  # walking discomfort factor
         params.delay_value = 1.2  # delay discomfort factor
         params.pax_delay = 0  # extra seconds for each pickup and drop off
         params.walk_threshold = 450  # maximal walking distance (per origin or destination)
@@ -684,4 +694,9 @@ if __name__ == "__main__":
         #params.t0='17:00'
         #ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit.json')  # load the default
 
-    pipeline(inData, params, EXPERIMENT_NAME)
+    for size in [1400]:
+        from ExMAS.utils import inData as inData
+        params.nP = size
+        EXPERIMENT_NAME = "size_{}".format(size)
+        pipeline(inData, params, EXPERIMENT_NAME)
+        del inData
