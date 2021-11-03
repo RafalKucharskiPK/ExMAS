@@ -148,7 +148,7 @@ def PT_utility(requests,params):
         walk_factor = 2
         wait_factor = 2
         transfer_penalty = 500
-        requests['PT_fare'] = requests.transitTime* params.avg_speed/1000 * 0.3
+        requests['PT_fare'] = 1 + requests.transitTime * params.avg_speed/1000 * 0.175
         requests['u_PT'] = requests['PT_fare'] + \
                            requests.VoT * (walk_factor * requests.walkDistance / params.speeds.walk +
                                            wait_factor * requests.waitingTime +
