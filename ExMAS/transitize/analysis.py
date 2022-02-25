@@ -41,17 +41,18 @@ def process_transitize(inData, params):
     return inData
 
 
-def load_results(PATH, inData=None):
+def load_results(PATH, EXP_NAME = None, inData=None):
     if inData is None:
         from ExMAS.utils import inData as inData
     inData.transitize = DotMap(_dynamic=False)
 
     for file in os.listdir(PATH):
         if file.endswith(".csv"):
-            inData.transitize[file.split("_")[1][:-4]] = read_csv_lists(
-                pd.read_csv(os.path.join(PATH, file), index_col=0))
-            if "row" in inData.transitize[file.split("_")[1][:-4]].columns:
-                del inData.transitize[file.split("_")[1][:-4]]['row']
+            if EXP_NAME is None or file.startswith(EXP_NAME):
+                inData.transitize[file.split("_")[-1][:-4]] = read_csv_lists(
+                    pd.read_csv(os.path.join(PATH, file), index_col=0))
+                if "row" in inData.transitize[file.split("_")[-1][:-4]].columns:
+                    del inData.transitize[file.split("_")[-1][:-4]]['row']
     return inData
 
 
@@ -147,7 +148,9 @@ def PT_utility(requests,params):
         walk_factor = 2
         wait_factor = 2
         transfer_penalty = 500
-        requests['u_PT'] = requests.VoT * (walk_factor * requests.walkDistance / params.speeds.walk +
+        requests['PT_fare'] = 1 + requests.transitTime * params.avg_speed/1000 * 0.175
+        requests['u_PT'] = requests['PT_fare'] + \
+                           requests.VoT * (walk_factor * requests.walkDistance / params.speeds.walk +
                                            wait_factor * requests.waitingTime +
                                            transfer_penalty * requests.transfers + requests.transitTime)
     return requests
@@ -188,8 +191,11 @@ def make_report(inData):
     kinds = ['p', 'd2d', 's2s', 'ms']
     for i in [0, 1, 2, 3]:
         ret[i] = inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1][KPIs].sum()
+        #ret[i] = pd.concat([ret[i],
+        #                    inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1].groupby(
+        #                        'kind').size()])
         ret[i] = pd.concat([ret[i],
-                            inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1].groupby(
+                            inData.transitize.rm[inData.transitize.rm['solution_{}'.format(i)] == 1].groupby(
                                 'kind').size()])
         inds = inData.transitize.rides[inData.transitize.rides['solution_{}'.format(i)] == 1].indexes
         if 'requests1' in inData.transitize:
@@ -199,8 +205,9 @@ def make_report(inData):
         ret[i]['nRides'] = (0 if i == 0 else ret[i - 1]['nRides']) + \
                            inData.transitize.rides[inData.transitize.rides.kind == kinds[i]].shape[0]
 
+
     inData.transitize.report = pd.DataFrame(ret).T
     inData.transitize.report['efficiency'] = inData.transitize.report['fare'] / inData.transitize.report['u_veh']*3600
-    inData.transitize.report['occupancy'] = inData.transitize.report['ttrav'] / inData.transitize.report['u_veh']
+    inData.transitize.report['occupancy'] = inData.transitize.requests.ttrav.sum() / inData.transitize.report['u_veh']
     inData.transitize.report = inData.transitize.report.T
     return inData

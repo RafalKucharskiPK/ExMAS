@@ -24,7 +24,7 @@ import json
 from matplotlib.collections import LineCollection
 
 
-def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
+def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None, fontsize = 10, figsize = (20,20)):
     colors = sns.color_palette("Set2", 6)
     rides = inData.transitize.rides
     requests = inData.transitize.requests
@@ -55,24 +55,26 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
 
     d2d_rides = rides.loc[s2s_rides.d2d_reference.values]
 
-    fig, ax = ox.plot_graph(G, figsize=(20, 20), node_size=0, node_color='black', edge_color='grey',
+    fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, node_color='black', edge_color='grey',
                             bgcolor='white', edge_linewidth=0.2, bbox=bbox,
                             show=False, close=False)
 
     if level == 0:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
-            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=10,
-                               color=colors[i], fig=fig, ax=ax, lw=5, plot_shared=False)
+            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
+                               color='black', fig=fig, ax=ax, lw=5, plot_shared=False)
 
-    if level>=2:
+    if level==2:
          for i, s2s_ride in enumerate(s2s_rides.index.values):
-           plot_s2s(inData, int(s2s_ride), fig=fig, ax = ax, color = colors[i], light = False)
+           plot_s2s(inData, int(s2s_ride), fig=fig, ax = ax, color = colors[i], light = False, fontsize = fontsize)
 
     if level ==1:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
-            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=10,
+            fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
                                color=colors[i], fig=fig, ax=ax, lw=3, plot_shared=True)
     if level == 3:
+        for i, s2s_ride in enumerate(s2s_rides.index.values):
+            plot_s2s(inData, int(s2s_ride), fig=fig, ax=ax, color='black',lw = 0, light=False, fontsize=fontsize)
 
         t = make_schedule(ride, rides)
         routes = list()  # ride segments
@@ -81,10 +83,11 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None):
             routes.append(nx.shortest_path(G, o, d, weight='length'))
             o = d
         for route in routes:
-            add_route(G, ax, route, color=['black'], lw=5, alpha=1)
+            add_route(G, ax, route, color=['black'], lw=3, alpha=1)
     if title:
         fig.suptitle(title, size = 20, fontweight='bold')
         fig.tight_layout()
+    return ax
 
 
 def make_schedule(t, r):
@@ -167,11 +170,11 @@ def plot_d2d(inData, ride_index, fig=None, ax=None,
             routes.append(nx.shortest_path(G, o, d, weight='length'))
             o = d
         for route in routes:
-            add_route(G, ax, route, color=[color], lw=lw, alpha=0.8)
+            add_route(G, ax, route, color=[color], lw=lw, alpha=0.5)
     return fig, ax
 
 
-def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, light=True, label_offset=0, fontsize=8, color='blue'):
+def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw = None, light=True, label_offset=0, fontsize=8, color='blue'):
     '''
     plots stop-to-stop ride including stop point (common for all origins) and walking to it
     :param inData:
@@ -213,10 +216,10 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, light=True, label_offs
                         bbox=dict(facecolor='white', alpha=0, edgecolor='none'), fontsize=fontsize)
 
     transit_route = nx.shortest_path(G, ride.origin, ride.destination, weight='length')
-    add_route(G, ax, transit_route, color=[color], lw=3, alpha=1)
+    add_route(G, ax, transit_route, color=[color], lw=3 if lw is None else lw, alpha=1)
 
     for route in routes:
-        add_route(G, ax, route, color=['black'], lw=1, alpha=1, linestyle='dashed')
+        add_route(G, ax, route, color=['black'], lw= 1, alpha=1, linestyle='dashed')
     ax.scatter(G.nodes[ride.origin]['x'], G.nodes[ride.origin]['y'], s=150, c=[color], marker='o')
     ax.scatter(G.nodes[ride.destination]['x'], G.nodes[ride.destination]['y'], s=150, c=[color], marker='o')
     return fig, ax
