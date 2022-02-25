@@ -12,9 +12,6 @@
 Rafał Kucharski, TU Delft,GMUM UJ  2021 rafal.kucharski@uj.edu.pl
 """
 
-
-
-
 import os
 import numpy as np
 
@@ -75,7 +72,7 @@ def transitize(inData, ride, trace=False):
     """
     See if pooled door-to-door can be served stop-to-stop
     It assumes two stops per ride: pickup and dropoff
-    :param inData: complete input data
+    :param inData: complete input data from ExMAS
     :param ride: this particular ride (result of ExMAS)
     :param plot: to generate plots (for debugging only)
     :param trace: to report full convergence
@@ -94,7 +91,7 @@ def transitize(inData, ride, trace=False):
         # utility of stop-to-stop trip i for all the travellers
         return (params.price * (1 - params.s2s_discount) * traveller.dist / 1000 +  # fare
                 traveller.VoT * params.WtS * (
-                            traveller.s2s_ttrav + params.delay_value * traveller.delay) +  # travel time
+                        traveller.s2s_ttrav + params.delay_value * traveller.delay) +  # travel time
                 traveller.VoT * params.walk_discomfort * (traveller.orig_walk_time + traveller.dest_walk_time))  # walk
 
     # default return
@@ -147,14 +144,14 @@ def transitize(inData, ride, trace=False):
     origs_list = orig_common_catchment.columns.to_list()
     dests_list = dest_common_catchment.columns.to_list()
     treqs = reqs.set_index('origin').treq
-    early = treqs.min()  # first departure time (no earlier than first request
+    early = treqs.min()  # first departure time (no earlier than the first  request)
     late = treqs.max() + params.walk_threshold  # here we need to add some slack (to let everyone access)
 
     inData.logger.info('Transitizing ride: {} \t Common orig points:{},  dest points: {}'.format(ride.name,
                                                                                                  len(origs_list),
                                                                                                  len(dests_list)))
 
-    best_logsum = -np.inf  # we optimize logsum
+    best_logsum = -np.inf  # we optimize for logsum
     if trace:
         trace = list()  # if we want to have full report (for debuggin and visualization only)
     for orig in origs_list:  # first loop - origins
@@ -166,6 +163,7 @@ def transitize(inData, ride, trace=False):
         df_o = rm.join(orig_walks, on='origin')  # add to rm column orig_walks (this is the return dataframe)
         min_delay = np.inf
         opt_dep = early
+        # for future - this can be done with numpy better (?)
         for dep in range(early, late):  # optimize delay for this pick-up point (this is heuristic?)
             delays = abs((dep - orig_walks - treqs) ** 2)  # see the square of delays (to avoid imbalance)
             if delays.sum() < min_delay:  # if improves
@@ -309,19 +307,16 @@ def process_level1(inData, params):
 
 
 def level_2(inData, params):
-
     if params.get('parallel', False):
         import dask.dataframe as dd
-        #single_applied = to_apply[to_apply.degree==1].apply(lambda x: transitize(inData, x), axis=1)
-
+        # single_applied = to_apply[to_apply.degree==1].apply(lambda x: transitize(inData, x), axis=1)
 
         ddf = dd.from_pandas(inData.sblts.rides, npartitions=params.parallel)
 
         applied = ddf.map_partitions(lambda dframe: dframe.apply(lambda x: transitize(inData, x), axis=1)).compute(
             scheduler='processes')
 
-
-        #applied = pd.concat([single_applied,applied.compute()])
+        # applied = pd.concat([single_applied,applied.compute()])
     else:
         to_apply = inData.sblts.rides[inData.sblts.rides.degree != 1]
         applied = to_apply.apply(lambda x: transitize(inData, x), axis=1)  # main
@@ -549,7 +544,6 @@ def stick_private_to_ms(inData, params):
     return inData
 
 
-
 def list_unmergables(inData):
     """
     lists pairs of rides that cannot be merged together (they contain the same requests
@@ -597,11 +591,10 @@ def pipeline(inData, params, EXPERIMENT_NAME):
         inData.transitize.rides.to_csv('rides.csv')
     else:
         inData, params = level_3(inData, params)  # III ExMAS multistop - rides at level_3 (kind 'ms')
-        #inData = stick_private_to_ms(inData, params)  # IV stick private rides to
+        # inData = stick_private_to_ms(inData, params)  # IV stick private rides to
 
     inData.logger.warn('Processing results')
     inData = process_transitize(inData, params)
-
 
     OUTPATH = "transit_results"
     inData.transitize.requests1.to_csv('{}/{}_requests.csv'.format(OUTPATH, EXPERIMENT_NAME))
@@ -613,7 +606,7 @@ def pipeline(inData, params, EXPERIMENT_NAME):
 
 if __name__ == "__main__":
     DEBUG = False
-    EXPERIMENT_NAME = 'Duze1200_2'
+    EXPERIMENT_NAME = 'Luty'
 
     cwd = os.getcwd()
     os.chdir(os.path.join(cwd, '../..'))
@@ -676,12 +669,12 @@ if __name__ == "__main__":
         params.multi_stop_WtS = 1.1  # willingness to share in multi-stop pooling (now lower)
 
         params.second_level_shared_discount = ((1 - params.s2s_discount) - (1 - params.multistop_discount)) / (
-                1 - params.s2s_discount) # how much we reduce multi-stop trip related to stop-to-stop
+                1 - params.s2s_discount)  # how much we reduce multi-stop trip related to stop-to-stop
 
         params.without_matching = False  # we do not do matching now
         params.DEBUG = DEBUG
         params.parallel = False
-        #params.t0='17:00'
-        #ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit.json')  # load the default
+        # params.t0='17:00'
+        # ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit.json')  # load the default
 
     pipeline(inData, params, EXPERIMENT_NAME)
