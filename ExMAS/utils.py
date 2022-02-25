@@ -163,9 +163,12 @@ def generate_passenger(p_id=None, rand=False):
     return passenger
 
 
-def download_G(inData, _params, make_skims=True):
+def download_G(inData, _params, make_skims=True, download=True):
     # uses osmnx to download the graph
-    inData.G = ox.graph_from_place(_params.city, network_type='drive')
+    if download:
+        inData.G = ox.graph_from_place(_params.city, network_type='drive')
+    else:
+        inData.G = ox.load_graphml(filepath=_params.paths.G)
     inData.nodes = pd.DataFrame.from_dict(dict(inData.G.nodes(data=True)), orient='index')
     if make_skims:
         inData.skim_generator = nx.all_pairs_dijkstra_path_length(inData.G,
@@ -328,6 +331,53 @@ def load_albatross_csv(_inData, _params, sample=True):
     _inData.passengers = generic_generator(generate_passenger, _params.nP).reindex(_inData.requests.index)
     _inData.passengers.pos = _inData.requests.origin
 
+    return _inData
+
+
+def load_nyc_csv(_inData, _params):
+    # loads the csv with trip requests
+    # filter for the trips within a predefined time window (either exact, or a batch with a given frequency)
+    try:
+        _params.paths.nyc_requests
+    except:
+        raise Exception("no nyc trips data path specified")
+
+
+    trips = pd.read_csv(_params.paths.nyc_requests, index_col=0)  # load csv (prepared in the other notebook)
+    trips.pickup_datetime = pd.to_datetime(trips.pickup_datetime)  # convert to times
+
+    # A: Filter for simulation times
+    if _params.get('freq', 'False'):  # given frequency (default '10min')
+        batches = trips.groupby(pd.Grouper(key='pickup_datetime', freq=_params.get('freq', '10min')))
+        if _params.get('batch', 'False'):  # random batch
+            batch = list(batches.groups.keys())[_params.batch]  # particular batch
+        else:  # random 'freq'-minute batch# i-th batch
+            batch = random.choice(list(batches.groups.keys()))
+        df = batches.get_group(batch)
+    else:  # exact date and sim-time
+        early = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00")
+        late = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00") + pd.to_timedelta(_params.simTime,
+                                                                                                  unit='H')
+        df = trips[(trips.pickup_datetime >= early) & (trips.pickup_datetime < late)]
+
+    # B: Populate missing fields
+
+    df['status'] = 0
+    df.pos = df['origin']
+    _inData.passengers = df
+    requests = df
+    requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
+    requests['treq'] = (trips.pickup_datetime - trips.pickup_datetime.min())
+    requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
+    # requests.ttrav = pd.to_timedelta(requests.ttrav)
+    # if params.get('avg_speed',False):
+    #    requests.ttrav = (pd.to_timedelta(requests.ttrav) / _params.avg_speed).dt.floor('1s')
+    requests.tarr = [request.pickup_datetime + request.ttrav for _, request in requests.iterrows()]
+    requests = requests.sort_values('treq')
+    requests['pax_id'] = requests.index.copy()
+    _inData.requests = requests
+    _inData.passengers.pos = _inData.requests.origin
+    _params.nP = _inData.requests.shape[0]
     return _inData
 
 
