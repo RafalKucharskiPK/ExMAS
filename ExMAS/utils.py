@@ -349,10 +349,10 @@ def load_nyc_csv(_inData, _params):
     # A: Filter for simulation times
     if _params.get('freq', 'False'):  # given frequency (default '10min')
         batches = trips.groupby(pd.Grouper(key='pickup_datetime', freq=_params.get('freq', '10min')))
-        if _params.get('batch', 'False'):  # random batch
+        if _params.get('batch', 'False'): # i-th batch
             batch = list(batches.groups.keys())[_params.batch]  # particular batch
-        else:  # random 'freq'-minute batch# i-th batch
-            batch = random.choice(list(batches.groups.keys()))
+        else:  # random 'freq'-minute batch
+            batch = random.choice(list(batches.groups.keys())) # random batch
         df = batches.get_group(batch)
     else:  # exact date and sim-time
         early = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00")
