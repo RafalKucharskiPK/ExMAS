@@ -108,12 +108,12 @@ def main(_inData, params, plot=False):
     """
     _inData.logger = init_log(params)  # initialize console logger
 
-    _inData = single_rides(_inData, params) # prepare requests as a potential single rides
-
+    _inData = single_rides(_inData, params)  # prepare requests as a potential single rides
     degree = 1
 
     _inData = pairs(_inData, params, plot=plot)
     degree = 2
+
     _inData.logger.info('Degree {} \tCompleted'.format(degree))
 
     if degree < params.max_degree:
@@ -803,20 +803,23 @@ def matching(_inData, params, plot=False, make_assertion=True):
     rides = _inData.sblts.rides.copy()
     requests = _inData.sblts.requests.copy()
 
-    opt_outs = False
-    multi_platform_matching = params.get('multi_platform_matching', False)
+    opt_outs = False # flag whether travellers have the option to opt-out
+    multi_platform_matching = params.get('multi_platform_matching', False)  # check matching will ge distributed
+    # over separate platforms
     
     if not multi_platform_matching: # classic matching for single platform
         selected = match(im=rides, r=requests, params=params, plot=plot,
-                         make_assertion=make_assertion, logger = _inData.logger)
+                         make_assertion=make_assertion, logger = _inData.logger,
+                         mutually_exclusives = _inData.sblts.get('mutually_exclusives', []))
         rides['selected'] = pd.Series(selected)
 
     else:  # matching to multiple platforms
         # select only rides for which all travellers are assigned to this platform
-        rides['platform'] = rides.apply(lambda row: list(set(_inData.sblts.requests.loc[row.indexes].platform.values)),
-                                        axis=1)
+        if params.get('assign_ride_platforms', True):
+            rides['platform'] = rides.apply(lambda row: list(set(_inData.sblts.requests.loc[row.indexes].platform.values)),
+                                            axis=1)
 
-        rides['platform'] = rides.platform.apply(lambda x: -2 if len(x) > 1 else x[0])
+            rides['platform'] = rides.platform.apply(lambda x: -2 if len(x) > 1 else x[0])
         rides['selected'] = 0
 
         opt_outs = -1 in rides.platform.unique() # do we have travellers opting out
@@ -825,7 +828,8 @@ def matching(_inData, params, plot=False, make_assertion=True):
             if platform>=0:
                 platform_rides = rides[rides.platform == platform]
                 selected = match(im=platform_rides, r=requests[requests.platform == platform], params=params,
-                                 plot=plot, make_assertion=False, logger = _inData.logger)
+                                 plot=plot, make_assertion=False, logger = _inData.logger,
+                                 mutually_exclusives=_inData.sblts.get('mutually_exclusives',[]))
 
                 rides['selected'].update(pd.Series(selected))
         
@@ -872,7 +876,7 @@ def matching(_inData, params, plot=False, make_assertion=True):
     return _inData
     
 
-def match(im, r, params, plot=False, make_assertion=True, logger = None):
+def match(im, r, params, plot=False, make_assertion=True, logger = None, mutually_exclusives = []):
     """
     main call of bipartite matching on a graph
     :param im: possible rides
@@ -893,6 +897,8 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     for i, index in enumerate(im.index.values):
         im_indexes[index] = i
         im_indexes_inv[i] = index
+
+
 
     im['lambda_r'] = im.apply(
         lambda x: params.shared_discount if x.kind == 1 else 1 - x.u_veh / sum([r.loc[_].ttrav for _ in x.indexes]),
@@ -915,9 +921,10 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
             ret[request_indexes[i]] = 1
         return ret
 
-    logger.info('Matching {} trips to {} rides in order to minimize {}'.format(nR,
-                                                                               im.shape[0],
-                                                                               params.matching_obj)) if logger is not None else None
+    logger.info('Matching {} trips to {} rides in order to {} {}'.format(nR,
+                                                                         im.shape[0],
+                                                                         params.get('minmax','min'),
+                                                                         params.matching_obj)) if logger is not None else None
     im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
     m = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
 
@@ -932,7 +939,11 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     im = im.reset_index(drop=True)
 
     # optimization
-    prob = pulp.LpProblem("Matching problem", pulp.LpMinimize)  # problem
+    maxmin = params.get('minmax','min')
+    if maxmin == 'min':
+        prob = pulp.LpProblem("Matching problem", pulp.LpMinimize)  # problem
+    elif maxmin == 'max':
+        prob = pulp.LpProblem("Matching problem", pulp.LpMaximize)  # problem
 
     variables = pulp.LpVariable.dicts("r", (i for i in im.index), cat='Binary')  # decision variables
 
@@ -950,17 +961,22 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None):
     for imr in m:
         j += 1
         prob += pulp.lpSum([imr[i] * variables[i] for i in variables if imr[i] > 0]) == 1, 'c' + str(j)
+    if len(mutually_exclusives)>0:
+        logger.info('Adding {} mutually exlcusive constrains'.format(len(mutually_exclusives)))
+        for exclusive in mutually_exclusives:
+
+            j += 1
+            prob += pulp.lpSum(variables[exclusive[0]]+variables[exclusive[1]])<=1, 'mutually_exclusive' + str(j)
     solver = pulp.get_solver('PULP_CBC_CMD')
-    solver.msg = False
+    solver.msg = params.get('solver_logger',False)
     prob.solve(solver)  # main otpimization call
-    #prob.solve()  # main otpimization call
 
     logger.info('Problem solution: {}. \n'
           'Total costs for single trips:  {:13,} '
           '\nreduced by matching to: {:20,}'.format(pulp.LpStatus[prob.status], int(sum(costs[:nR])),
                                                     int(pulp.value(prob.objective)))) if logger is not None else None
 
-    assert pulp.value(prob.objective) <= sum(costs[:nR]) + 2  # we did not go above original
+    # assert pulp.value(prob.objective) <= sum(costs[:nR]) + 2  # we did not go above original
 
     locs = dict()
     for variable in prob.variables():

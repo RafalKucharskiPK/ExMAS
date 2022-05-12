@@ -110,7 +110,7 @@ def experiment(space=None, config = 'ExMAS/data/configs/default.json', workers=-
     :return: set of csvs in 'data/results`
     """
     inData = mData
-    os.chdir("C:/Users/sup-rkucharski/PycharmProjects/ExMAS")
+    #os.chdir("C:/Users/sup-rkucharski/PycharmProjects/ExMAS")
 
     params = ExMAS.utils.get_config(config)
     params.logger_level = logger_level
