@@ -1234,8 +1234,9 @@ if __name__ == "__main__":
 
     import ExMAS.utils
 
-    params = ExMAS.utils.get_config('ExMAS/data/configs/default.json')
-    params = ExMAS.utils.make_paths(params)
+
+    params = ExMAS.utils.get_config('../ExMAS/data/configs/default.json')
+    params = ExMAS.utils.make_paths(params, main = "../ExMAS")
 
     params.t0 = pd.Timestamp.now()
 

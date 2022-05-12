@@ -12,19 +12,36 @@ Visualize the results
 Rafał Kucharski, TU Delft, GMUM UJ  2021 rafal.kucharski@uj.edu.pl
 """
 
-
-
 import osmnx as ox
+import numpy as np
 import pandas as pd
 import networkx as nx
 import seaborn as sns
+import matplotlib.pyplot as plt
 from .analysis import prep_results, make_report
 import json
 
 from matplotlib.collections import LineCollection
 
 
-def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None, fontsize = 10, figsize = (20,20)):
+def plot_multi_ms(inData, n, figname=None, savefig=False):
+    ax = None
+    fig = None
+    ride_indexes = inData.transitize.rm[
+        (inData.transitize.rm.solution_3 == 1) & (inData.transitize.rm.kind == 'ms')].ride.unique()
+    ride_indexes = np.random.choice(ride_indexes, n)
+    colors = sns.color_palette("Set2", n)
+    for i, ms in enumerate(ride_indexes):
+        fig, ax = plot_ms(inData, ms, level=3, title=None, light=True, ax=ax, fig=fig, bbox=None, color=colors[i])
+    if savefig:
+        plt.savefig('maps/map_{}_{}.png'.format(n, np.random.randint(0, 1000)) if figname is None else figname, dpi=300)
+    return fig
+
+
+
+
+def plot_ms(inData, ride_index, fig=None, ax=None, bbox=0.1, level=0, title=None,
+            fontsize=10, figsize=(20, 20), light=False, color='black'):
     colors = sns.color_palette("Set2", 6)
     rides = inData.transitize.rides
     requests = inData.transitize.requests
@@ -40,41 +57,42 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None, fontsize = 10
     ride['origins'] = requests.loc[ride.indexes].origin.values
     ride['destinations'] = requests.loc[ride.indexes].destination.values
 
-    if bbox is not None:
-        ride['origins'] = requests.loc[ride.indexes].origin.values
-        ride['destinations'] = requests.loc[ride.indexes].destination.values
-        X = pd.Series([inData.nodes.loc[_].x for _ in ride.origins.tolist() + ride.destinations.tolist()])
-        Y = pd.Series([inData.nodes.loc[_].y for _ in ride.origins.tolist() + ride.destinations.tolist()])
-        deltaX = bbox * (X.max() - X.min())
-        deltaY = bbox * (Y.max() - Y.min())
-        bbox = (Y.max() + deltaY, Y.min() - deltaY, X.max() + deltaX, X.min() - deltaX)
-
     private_rides = rides[rides.kind == 'p'][rides['index'].isin(ride.indexes)]
 
     s2s_rides = rides.loc[ride.high_level_indexes]
 
     d2d_rides = rides.loc[s2s_rides.d2d_reference.values]
 
-    fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, node_color='black', edge_color='grey',
-                            bgcolor='white', edge_linewidth=0.2, bbox=bbox,
-                            show=False, close=False)
+    if ax is None:
+        if bbox is not None:
+            ride['origins'] = requests.loc[ride.indexes].origin.values
+            ride['destinations'] = requests.loc[ride.indexes].destination.values
+            X = pd.Series([inData.nodes.loc[_].x for _ in ride.origins.tolist() + ride.destinations.tolist()])
+            Y = pd.Series([inData.nodes.loc[_].y for _ in ride.origins.tolist() + ride.destinations.tolist()])
+            deltaX = bbox * (X.max() - X.min())
+            deltaY = bbox * (Y.max() - Y.min())
+            bbox = (Y.max() + deltaY, Y.min() - deltaY, X.max() + deltaX, X.min() - deltaX)
+        fig, ax = ox.plot_graph(G, figsize=figsize, node_size=0, node_color='black', edge_color='grey',
+                                bgcolor='white', edge_linewidth=0.1, bbox=bbox,
+                                show=False, close=False)
 
     if level == 0:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
             fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
                                color='black', fig=fig, ax=ax, lw=5, plot_shared=False)
 
-    if level==2:
-         for i, s2s_ride in enumerate(s2s_rides.index.values):
-           plot_s2s(inData, int(s2s_ride), fig=fig, ax = ax, color = colors[i], light = False, fontsize = fontsize)
+    if level == 2:
+        for i, s2s_ride in enumerate(s2s_rides.index.values):
+            plot_s2s(inData, int(s2s_ride), fig=fig, ax=ax, color=colors[i], light=False, fontsize=fontsize)
 
-    if level ==1:
+    if level == 1:
         for i, d2d_ride in enumerate(d2d_rides.index.values):
             fig, ax = plot_d2d(inData, int(d2d_ride), light=False, fontsize=fontsize,
                                color=colors[i], fig=fig, ax=ax, lw=3, plot_shared=True)
     if level == 3:
         for i, s2s_ride in enumerate(s2s_rides.index.values):
-            plot_s2s(inData, int(s2s_ride), fig=fig, ax=ax, color='black',lw = 0, light=False, fontsize=fontsize)
+            plot_s2s(inData, int(s2s_ride), fig=fig, ax=ax, color=color, lw=0, light=False, fontsize=fontsize,
+                     superlight=light)
 
         t = make_schedule(ride, rides)
         routes = list()  # ride segments
@@ -83,11 +101,11 @@ def plot_ms(inData, ride_index, bbox=0.1, level = 0, title = None, fontsize = 10
             routes.append(nx.shortest_path(G, o, d, weight='length'))
             o = d
         for route in routes:
-            add_route(G, ax, route, color=['black'], lw=3, alpha=1)
+            add_route(G, ax, route, color=[color], lw=3, alpha=1)
     if title:
-        fig.suptitle(title, size = 20, fontweight='bold')
+        fig.suptitle(title, size=20, fontweight='bold')
         fig.tight_layout()
-    return ax
+    return fig, ax
 
 
 def make_schedule(t, r):
@@ -174,7 +192,8 @@ def plot_d2d(inData, ride_index, fig=None, ax=None,
     return fig, ax
 
 
-def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw = None, light=True, label_offset=0, fontsize=8, color='blue'):
+def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw=None, light=True,
+             label_offset=0, fontsize=8, color='blue', superlight=False):
     '''
     plots stop-to-stop ride including stop point (common for all origins) and walking to it
     :param inData:
@@ -194,13 +213,17 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw = None, light=True,
     ride['origins'] = requests.loc[ride.indexes].origin.values
     ride['destinations'] = requests.loc[ride.indexes].destination.values
     routes = list()
+    if superlight:
+        light = True
 
     if fig is None:
         fig, ax = ox.plot_graph(G, figsize=(25, 25), node_size=sizes, node_color='black', edge_color='grey',
                                 bgcolor='white', edge_linewidth=0.3,
                                 show=False, close=False)
+
     for i, origin in enumerate(ride.origins):
-        ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=40, c=[color], marker='o')
+
+        ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=20, c=[color], marker='o')
         if not light:
             ax.annotate('o{}'.format(ride.indexes[i]),
                         (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset)
@@ -209,7 +232,7 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw = None, light=True,
         routes.append(nx.shortest_path(G, ride.origins[i], ride.origin, weight='length'))
         routes.append(nx.shortest_path(G, ride.destination, ride.destinations[i], weight='length'))
     for i, origin in enumerate(ride.destinations):
-        ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=40, c=[color], marker='o')
+        ax.scatter(G.nodes[origin]['x'], G.nodes[origin]['y'], s=20, c=[color], marker='o')
         if not light:
             ax.annotate('d{}'.format(ride.indexes[i]),
                         (G.nodes[origin]['x'] + label_offset, G.nodes[origin]['y'] + label_offset),
@@ -219,7 +242,8 @@ def plot_s2s(inData, ride_id, sizes=0, fig=None, ax=None, lw = None, light=True,
     add_route(G, ax, transit_route, color=[color], lw=3 if lw is None else lw, alpha=1)
 
     for route in routes:
-        add_route(G, ax, route, color=['black'], lw= 1, alpha=1, linestyle='dashed')
+        add_route(G, ax, route, color=[color if superlight else 'black'], lw=1, alpha=1,
+                  linestyle='solid' if superlight else 'dashed')
     ax.scatter(G.nodes[ride.origin]['x'], G.nodes[ride.origin]['y'], s=150, c=[color], marker='o')
     ax.scatter(G.nodes[ride.destination]['x'], G.nodes[ride.destination]['y'], s=150, c=[color], marker='o')
     return fig, ax
@@ -248,8 +272,6 @@ def add_route(G, ax, route, color='grey', lw=2, alpha=0.5, linestyle='solid'):
             lines.append(line)
     lc = LineCollection(lines, colors=color[0], linewidths=lw, alpha=alpha, zorder=3, linestyle=linestyle)
     ax.add_collection(lc)
-
-
 
 
 if __name__ == "__main__":

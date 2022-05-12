@@ -410,6 +410,7 @@ def prepare_level3(inData, params):
     params.make_assertion_extension = False
     params.make_assertion_pairs = False
     params.without_matching = True
+    # params.matching_obj = 'degree'
 
     return inData, params
 
@@ -438,7 +439,7 @@ def process_level3(inData, inData_copy):
     inData.transitize.rm3 = ExMAS.utils.make_traveller_ride_matrix(
         inData_copy)  # data frame with two indices: ride - traveller, but now for 2nd level ExMAS
 
-    inData.transitize.rides3 = inData_copy.sblts.rides.copy()  # 'd2d' rides
+    inData.transitize.rides3 = inData_copy.sblts.rides.copy()  # 'ms' rides
 
     for col in ['orig_walk_time', 'dest_walk_time']:
         inData.transitize.rides3[col] = \
@@ -453,6 +454,9 @@ def process_level3(inData, inData_copy):
 
     # add new rides to the solution
     to_concat = inData.transitize.rides3[inData.transitize.rides3.degree > 1]
+    # add here filter for ms rides which are inefficient for any traveller
+    # rm = inData.transitize.rm
+    # rm['u_private'] = rm.apply(lambda x: rm[(rm.kind == 'p') & (rm.traveller == x.traveller)].u.iloc[0], axis=1)
     to_concat['solution_0'] = 0
     to_concat['solution_1'] = 0
     to_concat['solution_2'] = 0
@@ -483,64 +487,80 @@ def stick_private_to_ms(inData, params):
     """
     skim = inData.skims.walk
     rides = inData.transitize.rides
-
-    requests = inData.transitize.requests1
+    default_solution = {'o': None,
+                        'd': None,
+                        'walk': np.inf,
+                        'ride': np.inf,
+                        'ride_time': np.inf,
+                        'delay': np.inf}
+    if 'requests1' in inData.transitize.keys():
+        requests = inData.transitize.requests1
+    elif'requests' in inData.transitize.keys():
+            requests = inData.transitize.requests
+    else:
+        raise
     to_be_sticked = rides[(rides.solution_3 == 1) & (rides.kind == 'p')]
     to_stick_to = rides[(rides.solution_3 == 1) & (rides.kind == 'ms')]
-    ret = dict()
-    for i in to_be_sticked.index:  # loop for each private request
-        request = requests.loc[i]
-        best_to = np.inf  # find the best (shortest) multi-stop alternative
-        solution_to = pd.Series(
-            {'o': None, 'd': None, 'walk': None, 'ride': None, 'delay': None})  # output skeleton
-        for j in to_stick_to.index:  # loop for ms rides to find the best one
-            ms_ride = rides.loc[j]
-            t = make_schedule(ms_ride, rides)
-            t.node = t.node.astype(int)
-            t.times = ms_ride.times
-            t['dep'] = t.apply(lambda x: t.times[:x.name].sum(), axis=1)
-            t['origin_walk'] = t.apply(lambda x: skim[x.node][request.origin], axis=1)
-            t['dest_walk'] = t.apply(lambda x: skim[request.destination][x.node], axis=1)
-            best = np.inf
-            solution = pd.Series({'ride': None, 'o': None, 'd': None,
-                                  'walk': None, 'ride_time': None, 'delay': None})
-            for o in t.index:
-                for d in t.index[o + 1:]:
-                    tt = params.walk_discomfort * t.loc[o].origin_walk + \
-                         t.times[o + 1:d + 1].sum() + \
-                         params.walk_discomfort * t.loc[d].dest_walk + \
-                         params.delay_value * abs(request.treq - (t.dep[o] - t.loc[o].origin_walk))
-                    if tt < best:
-                        best = tt
-                        solution.o = o
-                        solution.d = d
-                        solution.walk = t.loc[o].origin_walk + t.loc[d].dest_walk
-                        solution.ride_time = t.times[o + 1:d + 1].sum()
-                        solution.ride = j
-                        solution.delay = abs(request.treq - (t.dep[o] - t.loc[o].origin_walk))
-            if solution.walk + solution.ride_time < best_to:
-                best_to = solution.walk + solution.ride
-                solution_to = solution
-                solution.ride_time = j
+    if to_stick_to.shape[0] > 0:  # only if there are multi-stop rides to stick to
+        ret = dict()
+        for i in to_be_sticked.index:  # loop for each private request
+            request = requests.loc[i]
+            best_to = np.inf  # find the best (shortest) multi-stop alternative
+            solution_to = pd.Series(default_solution)
+            # output skeleton
+            for j in to_stick_to.index:  # loop for ms rides to find the best one
+                ms_ride = rides.loc[j]
+                t = make_schedule(ms_ride, rides)
+                t.node = t.node.astype(int)
+                t.times = ms_ride.times
+                t['dep'] = t.apply(lambda x: t.times[:x.name].sum(), axis=1)
+                t['origin_walk'] = t.apply(lambda x: skim[x.node][request.origin], axis=1)  # walk times to each pickup
+                t['dest_walk'] = t.apply(lambda x: skim[request.destination][x.node],
+                                         axis=1)  # walk time from each dropoff
+                best = np.inf  # to store the optimal
+                solution = pd.Series(default_solution)
+                tt = np.inf
+                for o in t.index:  # loop for each stop in the ms ride
+                    for d in t.index[o + 1:]:
+                        tt = params.walk_discomfort * t.loc[o].origin_walk + \
+                             t.times[o + 1:d + 1].sum() + \
+                             params.walk_discomfort * t.loc[d].dest_walk + \
+                             params.delay_value * abs(request.treq - (t.dep[o] - t.loc[o].origin_walk))
+                        if tt < best:
+                            best = tt
+                            solution.o = o
+                            solution.d = d
+                            solution.walk = t.loc[o].origin_walk + t.loc[d].dest_walk
+                            solution.ride_time = t.times[o + 1:d + 1].sum()
+                            solution.ride = j
+                            solution.delay = abs(request.treq - (t.dep[o] - t.loc[o].origin_walk))
+                if solution.walk + solution.ride_time < best_to:
+                    best_to = solution.walk + solution.ride
+                    #solution.ride_time = tt
+                    #solution.ride = j
+                    solution_to = solution
 
-        u_sticked = params.price * (1 - params.multistop_discount) + \
-                    request.VoT * (params.walk_discomfort * solution_to.walk +
-                                   solution_to.ride_time +
-                                   params.delay_value * solution_to.delay)
-        inData.logger.info(
-            'Request {} best sticked to ride {} '
-            'with walk time {} ride time {} and delay {}'.format(i,
-                                                                 solution_to.ride,
-                                                                 solution_to.walk,
-                                                                 solution_to.ride,
-                                                                 solution_to.delay))
-        if u_sticked < request.u_sh:
-            inData.logger.info('\tAtractive {}>{}'.format(u_sticked, request.u_she))
-            ret[i] = (solution_to.ride, solution_to.o, solution_to.d, u_sticked)
-        else:
-            inData.logger.info('\tInatractive {}>{}'.format(u_sticked, request.u_sh))
+            u_sticked = params.price * (1 - params.multistop_discount) + \
+                        request.VoT * (params.walk_discomfort * solution_to.walk +
+                                       params.multi_stop_WtS * solution_to.ride_time +
+                                       params.delay_value * solution_to.delay)
+            inData.logger.info(
+                'Request {} best sticked to ride {} '
+                'with walk time {} ride time {} and delay {}'.format(i,
+                                                                     solution_to.ride,
+                                                                     solution_to.walk,
+                                                                     solution_to.ride_time,
+                                                                     solution_to.delay))
+            if u_sticked < request.u_sh:
+                inData.logger.info('\tAtractive {}>{}'.format(u_sticked, request.u_sh))
+                ret[i] = (solution_to.ride, solution_to.o, solution_to.d, u_sticked)
+            else:
+                #inData.logger.info('\tInatractive {}>{}'.format(u_sticked, request.u_sh))
+                pass
 
-    inData.transitize.requests1['solution_4'] = requests.apply(lambda x: ret.get(x.name, x.solution_3))
+        inData.transitize.requests1['solution_4'] = requests.apply(lambda x: ret.get(x.name, None))
+    else:
+        inData.transitize.requests1['solution_4'] = 0
     return inData
 
 
@@ -583,15 +603,15 @@ def pipeline(inData, params, EXPERIMENT_NAME):
     else:
         params.inData = ExMAS.utils.load_albatross_csv(inData, params)  # load demand from albatross
 
-    inData = level1(inData, params)  # I ExMAS d2d - rides at: level_0 (kind 'p') level_1 (kind 'd2d')
+    inData = level1(inData, params)  # I: ExMAS d2d - rides at: level_0 (kind 'p') or level_1 (kind 'd2d')
 
-    inData, params = level_2(inData, params)  # II ExMAS s2s - rides at level_2 (kind 'd2d')
+    inData, params = level_2(inData, params)  # II: ExMAS s2s - rides at level_2 (kind 'd2d')
     if inData.transitize.rides[inData.transitize.rides.kind == 's2s'].shape[0] == 0:
         inData.logger.warn('No transitable rides, early exit')
         inData.transitize.rides.to_csv('rides.csv')
     else:
         inData, params = level_3(inData, params)  # III ExMAS multistop - rides at level_3 (kind 'ms')
-        # inData = stick_private_to_ms(inData, params)  # IV stick private rides to
+        inData = stick_private_to_ms(inData, params)  # IV stick private rides to
 
     inData.logger.warn('Processing results')
     inData = process_transitize(inData, params)
@@ -606,7 +626,7 @@ def pipeline(inData, params, EXPERIMENT_NAME):
 
 if __name__ == "__main__":
     DEBUG = False
-    EXPERIMENT_NAME = 'Luty'
+    EXPERIMENT_NAME = 'pol_godziny'
 
     cwd = os.getcwd()
     os.chdir(os.path.join(cwd, '../..'))
@@ -639,16 +659,16 @@ if __name__ == "__main__":
                 1 - params.s2s_discount)
         params.without_matching = False
         params.DEBUG = DEBUG
-        params.parallel = 4  # False or nThreads
+        params.parallel = False  # False or nThreads
         # params.t0='17:00'
         # ExMAS.utils.save_config(params, 'ExMAS/data/configs/transit_debug.json')  # load the default
     else:
         params = ExMAS.utils.get_config('ExMAS/data/configs/transit.json')  # load the default
-        params.nP = 1200  # number of trips
-        params.simTime = 0.25  # per simTime hours
+        params.nP = 2000  # number of trips
+        params.simTime = 0.5  # per simTime hours
         params.mode_choice_beta = -0.3  # only to estimate utilities of pickup points
         params.VoT = 0.0035  # value of time (eur/second)
-        params.VoT_std = params.VoT / 8  # variance of Value of Time
+        params.VoT_std = params.VoT / 4  # variance of Value of Time
 
         params.speeds = DotMap()
 

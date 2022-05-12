@@ -89,9 +89,9 @@ trips_DESCRIPTIONS = ['id',
                       'index of being picked up in the  ride']
 
 
-def make_paths(params, relative=False):
+def make_paths(params, relative=False, main='ExMAS'):
     # call it whenever you change a city name, or main path
-    params.paths.main = "ExMAS"
+    params.paths.main = main
 
     params.paths.data = os.path.join(params.paths.main, 'data')
     params.paths.params = os.path.join(params.paths.data, 'configs')
@@ -434,6 +434,7 @@ def load_albatross_csv(_inData, _params, sample=True):
 
 
     if sample:
+
         df = df.sample(_params.nP)
 
     df['ttrav_alb'] = pd.to_timedelta(df.ttrav)
