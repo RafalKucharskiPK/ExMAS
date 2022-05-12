@@ -1,5 +1,7 @@
 # ExMAS
 > Exact Matching of Attractive Shared rides (ExMAS) for system-wide strategic evaluations
+
+> Scalable off-line strategic utility-based ride-pooling algorithm
 ---
 [![Build Status](https://travis-ci.org/RafalKucharskiPK/ExMAS.svg?branch=master)](https://travis-ci.org/RafalKucharskiPK/ExMAS)
 [![Coverage Status](https://coveralls.io/repos/github/RafalKucharskiPK/ExMAS/badge.svg?branch=master)](https://coveralls.io/github/RafalKucharskiPK/ExMAS?branch=master)
