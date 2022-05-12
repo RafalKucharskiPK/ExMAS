@@ -11,3 +11,4 @@ ExMAS/data/graphs/Amsterdam.graphml
 ExMAS/data/.DS_Store
 ExMAS/data/corona/.DS_Store
 cache/*
+.vscode/*
