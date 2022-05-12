@@ -5,6 +5,11 @@ import pandas as pd
 import random
 
 
+
+
+
+
+
 def prepare_PoA(inData, CALC_SUBRIDES = False):
     """
     precompute attributes needed for Equilibrium based matching
@@ -37,6 +42,10 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
             ret[request_indexes[i]] = 1
         return ret
 
+    step = 1
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
     im['row'] = im.apply(add_binary_row, axis=1)  # row to be used as constrain in optimization
     mtx = np.vstack(im['row'].values).T  # creates a numpy array for the constrains
     m = pd.DataFrame(mtx).astype(int)
@@ -62,6 +71,10 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     ranking = m_user_costs.rank(1, ascending=True, method='first')  # rank rides by lowest cost
 
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
+
     beta = -10  # behavioural parameter
 
     # matrices: row = pax , col = ride , val = cost, ranking, prob, etc.
@@ -79,6 +92,73 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     # compute degrees
     inData.sblts.rides['degree'] = inData.sblts.rides.apply(lambda x: len(x.indexes), axis=1)
+
+
+    # delays
+    inData.sblts.rides['treqs'] = inData.sblts.rides.apply(lambda x: inData.sblts.requests.loc[x.indexes].treq.values,
+                                                           axis=1)
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
+    def calc_deps(r):
+        deps = [r.times[0]]
+        for d in r.times[1:r.degree]:
+            deps.append(deps[-1] + d)  # departure times
+        t = inData.sblts.requests
+        return deps
+
+    inData.sblts.rides['deps'] = inData.sblts.rides.apply(calc_deps, axis=1)
+
+    inData.sblts.rides['delays'] = inData.sblts.rides['deps'] - inData.sblts.rides['treqs']
+
+    inData.sblts.rides['ttravs'] = inData.sblts.rides.apply(lambda r: [sum(r.times[i + 1:r.indexes_orig.index(r.indexes[i]) + r.degree+ 1 + r.indexes_dest.index(r.indexes[i])]) for i in range(r.degree)], axis = 1)
+
+    inData.sblts.rides['pruned'] = True
+
+    multis = list()
+    for i, ride in inData.sblts.rides.iterrows():
+        for t in ride.indexes:
+            multis.append([ride.name, t])
+    multis = pd.DataFrame(index=pd.MultiIndex.from_tuples(multis))
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
+    multis['ride'] = multis.index.get_level_values(0)
+    multis['traveller'] = multis.index.get_level_values(1)
+    multis = multis.join(inData.sblts.requests[['treq', 'dist', 'ttrav']], on='traveller')
+    multis = multis.join(inData.sblts.rides[['u_veh', 'u_paxes','degree', 'indexes', 'ttravs', 'delays']], on='ride')
+    multis['order'] = multis.apply(lambda r: r.indexes.index(r.traveller), axis=1)
+    multis['ttrav_sh'] = multis.apply(lambda r: r.ttravs[r.order], axis=1)
+    multis['delay'] = multis.apply(lambda r: r.delays[r.order], axis=1)
+    #multis['u'] = multis.apply(lambda r: r.u_paxes[r.order], axis=1)
+    multis['shared'] = multis.degree>1
+    multis['ride_time'] = multis.u_veh
+    multis = multis[['ride','traveller','shared', 'degree','treq','ride_time','dist','ttrav','ttrav_sh','delay']]
+    inData.sblts.rides_multi_index = multis
+
+    rides = inData.sblts.rides
+    rides['indexes_set'] = rides.indexes.apply(set)
+
+    def givemesubsets(row):
+        # returns list of all the subgroup indiced contained in a ride
+        return rides[rides.indexes_set.apply(lambda x: x.issubset(row.indexes_set))].index.values
+
+    rides['subgroups'] = rides.apply(givemesubsets, axis=1)
+
+    def givemesupersets(row):
+        # returns list of all the subgroup indiced contained in a ride
+        return rides[rides.indexes_set.apply(lambda x: row.indexes_set.issubset(x))].index.values
+
+    rides['supergroups'] = rides.apply(givemesupersets, axis=1)
+
+    inData.sblts.rides = rides
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
+
 
     # possible obj functions to PoA (per ride, not per traveller in ride)
 
@@ -118,7 +198,11 @@ def prepare_PoA(inData, CALC_SUBRIDES = False):
 
     # log sum of probabilities
     inData.sblts.rides['logsum_prob'] = inData.sblts.rides.apply(lambda ride: sum(math.log(_) for _ in ride.probs),
-                                                                 axis=1)
+                                                            axis=1)
+
+    inData.logger.warn('Prepare for game:  {}/6'.format(step))
+    step+=1
+
     if CALC_SUBRIDES:
         # identify rides contained in rides eg. ride (1,3) is contained in ride (1,3,5)
         ret = dict()
@@ -167,6 +251,7 @@ def calc_solution_PoA(inData):
         lambda x: int(inData.sblts.ranking_matrix.loc[x.name][x.ride_id]), axis=1)
     return inData
 
+
 def test_leader_follower(inData,nShuffle = 1):
     ret = dict()
     for i in range(nShuffle):
@@ -178,8 +263,6 @@ def test_leader_follower(inData,nShuffle = 1):
         ret[i] = KPIs(inData)
         inData.logger.info(ret[i])
     return pd.DataFrame(ret)
-
-
 
 
 def leader_follower(inData, shuffle = True, costs = 'ranking_matrix'):
@@ -217,7 +300,6 @@ def leader_follower(inData, shuffle = True, costs = 'ranking_matrix'):
         else:
             inData.logger.info("{} already served".format(i))
     return selected
-
 
 
 def KPIs(inData):
@@ -259,7 +341,6 @@ def test_obj_fun(inData, params, obj = 'u_pax', _plot = False):
     inData = calc_solution_PoA(inData)
 
     return KPIs(inData)
-
 
 
 def brute(inData, log_step=500000):
