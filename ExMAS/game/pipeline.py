@@ -10,7 +10,7 @@ import ExMAS.utils
 import pandas as pd
 
 
-# EXPERIMENT_NAME = '100'
+EXPERIMENT_NAME = 'test'
 
 
 def prep(params_path='ExMAS/spinoffs/game/ams.json'):
@@ -193,10 +193,6 @@ def process_results(inData, EXPERIMENT_NAME):
             ret_pax[col] = inData.results.rm[inData.results.rm[col] == 1][['ttrav_sh', 'cost_user', 'degree']].sum()
 
     ret_pax = pd.DataFrame(ret_pax).T
-    # ret_pax['min_max'] = ret_pax.apply(lambda x: 'min' if 'min' in x.name else 'max', axis=1)
-    # ret_pax['ttrav_sh'] = ret_pax['ttrav_sh'] / ret_pax.mean()['ttrav_sh']
-    # ret_pax['cost_user'] = ret_pax['cost_user'] / ret_pax.mean()['cost_user']
-    # ret_pax['degree'] = ret_pax['degree'] / 100
 
     inData.results.KPIs = pd.DataFrame(inData.results.KPIs).T
 
@@ -239,10 +235,6 @@ def pipe(EXPERIMENT_NAME):
     inData.results.rm = inData.sblts.rides_multi_index.copy()
     inData.results.KPIs = dict()
 
-    # inData = single_eval(inData, params, EXPERIMENT_NAME = EXPERIMENT_NAME,
-    #                      MATCHING_OBJS=['u_veh'],  # this can be more
-    #                      PRUNINGS=['EXMAS'],  # and this can be more
-    #                      PRICING='EXMAS')
 
     params.multi_platform_matching = True
     params.assign_ride_platforms = False
@@ -259,14 +251,6 @@ def pipe(EXPERIMENT_NAME):
                                  PRICING=PRICING,  # this is taken from first level loop
                                  minmax=('min', 'max'))  # direction BPoA, WPoA
 
-    #PRUNING = 'WINDOWS'
-    #PRICING = 'UNIFORM'
-    #inData = single_eval_windows(inData, params,
-    #                             EXPERIMENT_NAME=EXPERIMENT_NAME,
-    #                             MATCHING_OBJS=['total_group_cost'],  # this can be more
-    #                             PRUNINGS=[PRUNING],  # and this can be more
-    #                             PRICING=PRICING,
-    #                             minmax=('min', 'max'))
 
     inData = process_results(inData, EXPERIMENT_NAME)
 
@@ -274,6 +258,4 @@ def pipe(EXPERIMENT_NAME):
 
 
 if __name__ == '__main__':
-    pipe('test')
-    #for EXPERIMENT_NAME in ['res400a_{}'.format(_) for _ in range(2,10)]:
-    #    pipe(EXPERIMENT_NAME)
+    pipe(EXPERIMENT_NAME)
