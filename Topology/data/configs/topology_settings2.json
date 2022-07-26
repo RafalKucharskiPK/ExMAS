@@ -1,0 +1,42 @@
+{
+	"variable": null,
+	"values": null,
+	"graph_topological_properties": [
+		"Average_degree",
+		"Average_degree_group0",
+		"Average_degree_group1",
+		"Proportion_max_component",
+		"Fraction_isolated"		
+	],
+	"kpis": [
+		"shared_ratio",
+		"SavedVehHours",
+		"UtilityGained"
+	],
+	"graph_properties_against_inputs": [
+		"Average_degree_group1",
+		"Fraction_isolated"
+	],
+	"dictionary_variables": {
+		"shared_discount": "Sharing discount",
+		"shareddiscount": "Sharing discount",
+		"nP": "Number of trips",
+		"Average_degree": "Average node degree",
+		"Average_degree_group0": "Avg degree rides",
+		"Average_degree_group1": "Avg degree travellers",
+		"Average_clustering_group0": "Avg clustering rides",
+		"Average_clustering_group1": "Avg clustering travellers",
+		"Average_clustering_group0_reduced": "Avg clustering shared rides",
+		"Average_clustering_group1_reduced": "Avg clustering travellers among shared",
+		"Proportion_max_component": "Coverage of the greatest component",
+		"No_isolated_pairs": "Number of isolated pairs",
+		"shared_ratio": "Coverage of shared rides",
+		"SavedVehHours": "Saved vehicle hours (relative)",
+		"UtilityGained": "Utility gain",
+		"Fraction_isolated": "Fraction of nonshareable travellers",
+		"Batch": "Dataset"
+	},
+	"initial_parameters": "ExMAS/data/configs/nyc_prob.json",
+	"path_results": "data/results/",
+	"netwulf_config": "data/configs/netwulf_config.json"
+}
