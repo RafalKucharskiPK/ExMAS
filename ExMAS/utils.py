@@ -17,7 +17,8 @@ import pandas as pd
 import osmnx as ox
 import networkx as nx
 import numpy as np
-from osmnx.distance import get_nearest_node
+# from osmnx.distance import get_nearest_node
+from osmnx.distance import nearest_nodes
 import matplotlib.pyplot as plt
 
 # DataFrame skeletons
@@ -69,7 +70,6 @@ rides_DESCRIPTIONS = ['travellers indexes',
                       'row from incidence matrix used for ILP matching',
                       'binary flag whether rides is selected as part of the solution']
 
-
 # definitions for KPIs
 trips_DESCRIPTIONS = ['id',
                       'origin node (OSM index)',
@@ -92,9 +92,7 @@ trips_DESCRIPTIONS = ['id',
                       'index of being picked up in the  ride']
 
 
-
-
-def make_paths(params, relative = False):
+def make_paths(params, relative=False):
     # call it whenever you change a city name, or main path
     params.paths.main = "ExMAS"
 
@@ -111,7 +109,7 @@ def make_paths(params, relative = False):
     return params
 
 
-def get_config(path, root_path = None):
+def get_config(path, root_path=None):
     # reads a .json file with MaaSSim configuration
     # use as: params = get_config(config.json)
     with open(path) as json_file:
@@ -121,7 +119,7 @@ def get_config(path, root_path = None):
 
     if root_path is not None:
         config.paths.G = os.path.join(root_path, config.paths.G)  # graphml of a current .city
-        config.paths.skim = os.path.join(root_path,config.paths.skim)  # csv with a skim between the nodes of the .city
+        config.paths.skim = os.path.join(root_path, config.paths.skim)  # csv with a skim between the nodes of the .city
 
     return config
 
@@ -163,12 +161,9 @@ def generate_passenger(p_id=None, rand=False):
     return passenger
 
 
-def download_G(inData, _params, make_skims=True, download=True):
+def download_G(inData, _params, make_skims=True):
     # uses osmnx to download the graph
-    if download:
-        inData.G = ox.graph_from_place(_params.city, network_type='drive')
-    else:
-        inData.G = ox.load_graphml(filepath=_params.paths.G)
+    inData.G = ox.graph_from_place(_params.city, network_type='drive')
     inData.nodes = pd.DataFrame.from_dict(dict(inData.G.nodes(data=True)), orient='index')
     if make_skims:
         inData.skim_generator = nx.all_pairs_dijkstra_path_length(inData.G,
@@ -197,11 +192,12 @@ def load_G(inData, _params=None, stats=False, set_t=True):
         inData.stats = networkstats(inData)  # calculate center of network, radius and central node
     return inData
 
+
 ###########
 # RESULTS #
 ###########
 
-def merge_csvs(params = None, path = None, to_numeric=True, read_columns_from_filename = False):
+def merge_csvs(params=None, path=None, to_numeric=True, read_columns_from_filename=False):
     """ merges csvs in one folder into a single DF"""
     import glob
 
@@ -214,7 +210,7 @@ def merge_csvs(params = None, path = None, to_numeric=True, read_columns_from_fi
     for file_ in all_files:
         df = pd.read_csv(file_, index_col=0).T
         if read_columns_from_filename:
-            fields = file_.replace(path[:-5],'')[:-4].split("_")
+            fields = file_.replace(path[:-5], '')[:-4].split("_")
             df[fields[0]] = fields[1]  # n centers
             df['gammdist_shape'] = fields[4]
             df['gamma_imp_shape'] = fields[8]
@@ -226,24 +222,25 @@ def merge_csvs(params = None, path = None, to_numeric=True, read_columns_from_fi
 
     return res
 
+
 def make_KPIs(df, params):
     df['$U_q$'] = -df.PassUtility_ns
     df['$U_r$'] = -df.PassUtility
     df['$T_q$'] = -df.VehHourTrav
     df['$T_r$'] = -df.PassHourTrav
-    df['$\Delta T_r$'] = (df.VehHourTrav - df.VehHourTrav_ns)/df.VehHourTrav_ns
-    df['$\Delta T_q$'] = (df.PassHourTrav - df.PassHourTrav_ns)/df.PassHourTrav_ns
-    df['$\Delta U_r$'] = -(df.PassUtility - df.PassUtility_ns)/df.PassUtility_ns
-    df['$\Delta F$'] = -(df.fleet_size_nonshared- df.fleet_size_shared)/df.fleet_size_nonshared
+    df['$\Delta T_r$'] = (df.VehHourTrav - df.VehHourTrav_ns) / df.VehHourTrav_ns
+    df['$\Delta T_q$'] = (df.PassHourTrav - df.PassHourTrav_ns) / df.PassHourTrav_ns
+    df['$\Delta U_r$'] = -(df.PassUtility - df.PassUtility_ns) / df.PassUtility_ns
+    df['$\Delta F$'] = -(df.fleet_size_nonshared - df.fleet_size_shared) / df.fleet_size_nonshared
     df['$\Lambda_r$'] = df.lambda_shared
     df['$\lambda$'] = df.shared_discount
-    df['$R$'] =(df.SINGLE + df.PAIRS + df.TRIPLES + df.QUADRIPLES)
+    df['$R$'] = (df.SINGLE + df.PAIRS + df.TRIPLES + df.QUADRIPLES)
     df['$Q$'] = df.nP
     df['$T$'] = df.horizon.apply(lambda x: 3600 if x == -1 else x)
-    df['occupancy'] = df.PassHourTrav/df.VehHourTrav
-    df['revenue_ns'] = df.VehHourTrav_ns*params.price
-    df['revenue_s'] = ((1-df.shared_ratio)*df.VehHourTrav_ns*params.price +
-                       df.shared_ratio*df.VehHourTrav_ns*params.price*(1-params.shared_discount))
+    df['occupancy'] = df.PassHourTrav / df.VehHourTrav
+    df['revenue_ns'] = df.VehHourTrav_ns * params.price
+    df['revenue_s'] = ((1 - df.shared_ratio) * df.VehHourTrav_ns * params.price +
+                       df.shared_ratio * df.VehHourTrav_ns * params.price * (1 - params.shared_discount))
     df['$\Delta I$'] = (df['revenue_s'] - df['revenue_ns']) / df['revenue_ns']
     return df
 
@@ -297,7 +294,8 @@ def networkstats(inData):
     center_x = pd.DataFrame((inData.G.nodes(data='x')))[1].mean()
     center_y = pd.DataFrame((inData.G.nodes(data='y')))[1].mean()
 
-    nearest = get_nearest_node(inData.G, (center_y, center_x))
+    # nearest = get_nearest_node(inData.G, (center_y, center_x))
+    nearest = nearest_nodes(inData.G, center_x, center_y)
     ret = DotMap({'center': nearest, 'radius': inData.skim[nearest].quantile(0.75)})
     return ret
 
@@ -334,59 +332,17 @@ def load_albatross_csv(_inData, _params, sample=True):
     return _inData
 
 
-def load_nyc_csv(_inData, _params):
-    # loads the csv with trip requests
-    # filter for the trips within a predefined time window (either exact, or a batch with a given frequency)
-    try:
-        _params.paths.nyc_requests
-    except:
-        raise Exception("no nyc trips data path specified")
-
-
-    trips = pd.read_csv(_params.paths.nyc_requests, index_col=0)  # load csv (prepared in the other notebook)
-    trips.pickup_datetime = pd.to_datetime(trips.pickup_datetime)  # convert to times
-
-    # A: Filter for simulation times
-    if _params.get('freq', 'False'):  # given frequency (default '10min')
-        batches = trips.groupby(pd.Grouper(key='pickup_datetime', freq=_params.get('freq', '10min')))
-        if _params.get('batch', 'False'): # i-th batch
-            batch = list(batches.groups.keys())[_params.batch]  # particular batch
-        else:  # random 'freq'-minute batch
-            batch = random.choice(list(batches.groups.keys())) # random batch
-        df = batches.get_group(batch)
-    else:  # exact date and sim-time
-        early = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00")
-        late = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00") + pd.to_timedelta(_params.simTime,
-                                                                                                  unit='H')
-        df = trips[(trips.pickup_datetime >= early) & (trips.pickup_datetime < late)]
-
-    # B: Populate missing fields
-
-    df['status'] = 0
-    df.pos = df['origin']
-    _inData.passengers = df
-    requests = df
-    requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
-    requests['treq'] = (trips.pickup_datetime - trips.pickup_datetime.min())
-    requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
-    # requests.ttrav = pd.to_timedelta(requests.ttrav)
-    # if params.get('avg_speed',False):
-    #    requests.ttrav = (pd.to_timedelta(requests.ttrav) / _params.avg_speed).dt.floor('1s')
-    requests.tarr = [request.pickup_datetime + request.ttrav for _, request in requests.iterrows()]
-    requests = requests.sort_values('treq')
-    requests['pax_id'] = requests.index.copy()
-    _inData.requests = requests
-    _inData.passengers.pos = _inData.requests.origin
-    _params.nP = _inData.requests.shape[0]
-    return _inData
-
-
-def generate_demand(_inData, _params=None, avg_speed=False):
+def generate_demand(_inData, _params=None, avg_speed=False, start_time_exact=False):
     # generates nP requests with a given temporal and spatial distribution of origins and destinations
     # returns _inData.requests dataframe populated with nodes and times.
     df = pd.DataFrame(index=np.arange(1, _params.nP + 1), columns=inData.passengers.columns)
     df.status = 0
     df.pos = df.apply(lambda x: rand_node(_inData.nodes), axis=1)
+    # # Added part
+    # temp_part_of_indata = _inData.nodes
+    # temp_part_of_indata['pos'] = temp_part_of_indata.index
+    # df = pd.merge(df, temp_part_of_indata[['pos', 'x', 'y']], how='left', on=['pos'])
+    # # up to here
     _inData.passengers = df
     requests = pd.DataFrame(index=df.index, columns=_inData.requests.columns)
 
@@ -398,8 +354,11 @@ def generate_demand(_inData, _params=None, avg_speed=False):
                                                             _params.demand_structure.origins_dispertion * x))  # apply negative exponential distributions
     distances['p_destination'] = distances['distance'].apply(
         lambda x: math.exp(_params.demand_structure.destinations_dispertion * x))
-    if _params.demand_structure.temporal_distribution == 'uniform':
+    if _params.demand_structure.temporal_distribution == 'uniform' and not start_time_exact:
         treq = np.random.uniform(-_params.simTime * 60 * 60 / 2, _params.simTime * 60 * 60 / 2,
+                                 _params.nP)  # apply uniform distribution on request times
+    elif _params.demand_structure.temporal_distribution == 'uniform' and start_time_exact:
+        treq = np.random.uniform(0, _params.simTime * 60 * 60,
                                  _params.nP)  # apply uniform distribution on request times
     elif _params.demand_structure.temporal_distribution == 'normal':
         treq = np.random.normal(_params.simTime * 60 * 60 / 2,
@@ -432,7 +391,7 @@ def generate_demand(_inData, _params=None, avg_speed=False):
     return _inData
 
 
-def requests_to_geopandas(inData, filename = None):
+def requests_to_geopandas(inData, filename=None):
     """
     creates a geopandas dataframe with cooridinates Point(x,y) of origin and destination of request
     :param inData: uses inData.requests and inData.nodes (with coordinates)
@@ -444,8 +403,9 @@ def requests_to_geopandas(inData, filename = None):
     import geopandas as gpd
 
     geo_requests = inData.requests
-    geo_requests['Point_o'] = geo_requests.apply(lambda r: Point(inData.nodes.loc[r.origin].x, inData.nodes.loc[r.origin].y),
-                                         axis=1)
+    geo_requests['Point_o'] = geo_requests.apply(
+        lambda r: Point(inData.nodes.loc[r.origin].x, inData.nodes.loc[r.origin].y),
+        axis=1)
     geo_requests['origin_x'] = geo_requests.apply(lambda r: inData.nodes.loc[r.origin].x, axis=1)
     geo_requests['origin_y'] = geo_requests.apply(lambda r: inData.nodes.loc[r.origin].y, axis=1)
     geo_requests['Point_d'] = geo_requests.apply(
@@ -637,7 +597,7 @@ def plot_demand_poly(inData, _params, t0=None, vehicles=False, s=10):
     plt.show()
     fig, ax = ox.plot_graph(inData.G, node_size=0, edge_linewidth=0.5,
                             show=False, close=False,
-                            edge_color='black', bgcolor = 'white')
+                            edge_color='black', bgcolor='white')
     for _, r in inData.requests.iterrows():
         ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=s, marker='D')
         ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=s)
@@ -699,37 +659,38 @@ def load_requests(path):
     requests['pax_id'] = requests.index.copy()
     requests.tarr = pd.to_datetime(requests.tarr)
     requests.ttrav = pd.to_timedelta(requests.ttrav)
-    #requests.origin = requests.origin.astype(int)
-    #requests.destination = requests.destination.astype(int)
+    # requests.origin = requests.origin.astype(int)
+    # requests.destination = requests.destination.astype(int)
     return requests
 
 
-def plot_demand(inData, params, t0=None, vehicles=False, s=10):
+def plot_demand(inData, params, t0=None, vehicles=False, s=40):
     if t0 is None:
         t0 = inData.requests.treq.mean()
 
     # plot osmnx graph, its center, scattered nodes of requests origins and destinations
     # plots requests temporal distribution
-    fig, ax = plt.subplots(1, 3, figsize = (12,4))
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
     ((t0 - inData.requests.treq) / np.timedelta64(1, 'h')).plot.kde(title='Temporal distribution', ax=ax[0])
     (inData.requests.ttrav / np.timedelta64(1, 'm')).plot(kind='box', title='Trips travel times [min]', ax=ax[1])
     inData.requests.dist.plot(kind='box', title='Trips distance [m]', ax=ax[2])
     # (inData.requests.ttrav / np.timedelta64(1, 'm')).describe().to_frame().T
     plt.show()
-    fig, ax = ox.plot_graph(inData.G, figsize=(10, 10), node_size=0, edge_linewidth=0.5,
+    fig, ax = ox.plot_graph(inData.G, figsize=(s, s), node_size=0, edge_linewidth=0.5,
                             show=False, close=False,
-                            edge_color='grey', bgcolor = 'white' )
+                            edge_color='grey', bgcolor='white', dpi=600)
     for _, r in inData.requests.iterrows():
-        ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=s, marker='D')
-        ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=s)
+        ax.scatter(inData.G.nodes[r.origin]['x'], inData.G.nodes[r.origin]['y'], c='green', s=4*s, marker='D')
+        ax.scatter(inData.G.nodes[r.destination]['x'], inData.G.nodes[r.destination]['y'], c='orange', s=4*s)
     if vehicles:
         for _, r in inData.vehicles.iterrows():
             ax.scatter(inData.G.nodes[r.pos]['x'], inData.G.nodes[r.pos]['y'], c='blue', s=s, marker='x')
-    ax.scatter(inData.G.nodes[inData.stats['center']]['x'], inData.G.nodes[inData.stats['center']]['y'], c='red',
-               s=10 * s, marker='+')
-    plt.title(
-        'Demand in {} with origins marked in green, destinations in orange'.format(params.city))
-    plt.show()
+    # ax.scatter(inData.G.nodes[inData.stats['center']]['x'], inData.G.nodes[inData.stats['center']]['y'], c='red',
+    #            s=10 * s, marker='+')
+    # plt.title(
+    #     'Demand in {} with origins marked in green, destinations in orange'.format(params.city))
+    plt.savefig(params.path_results + 'AAAAAAAAAA.png')
+    # plt.show()
 
 
 def make_shareability_graph(requests, rides):
@@ -738,7 +699,7 @@ def make_shareability_graph(requests, rides):
     G.add_nodes_from(requests.index)
     edges = list()
     for i, row in rides.iterrows():
-        if len(row.indexes)>1:
+        if len(row.indexes) > 1:
             for j, pax1 in enumerate(row.indexes):
                 for k, pax2 in enumerate(row.indexes):
                     if pax1 != pax2:
@@ -746,6 +707,7 @@ def make_shareability_graph(requests, rides):
 
     G.add_edges_from(edges)
     return G
+
 
 def make_graph(requests, rides,
                mu=0.5, plot=False,
@@ -788,7 +750,7 @@ def make_graph(requests, rides,
         df['prob'] = df.apply(lambda x: x.expu / requests.loc[x.request].sum_u, axis=1)
     edges = list()
     for i, row in df.iterrows():
-        # edges.append((row.ride,row.request, {'prob':row.prob}))
+        # edges.append((row.ride, row.request, {'prob': row.prob}))
         edges.append((row.ride, row.request))
     # edges
     G.add_edges_from(edges)
@@ -808,8 +770,8 @@ def make_graph(requests, rides,
             plt.savefig(figname)
     return G
 
-def prepare_PoA(inData):
 
+def prepare_PoA(inData):
     m = np.vstack(inData.sblts.rides['row'].values).T  # creates a numpy array for the constrains
     m = pd.DataFrame(m).astype(int)
     plt.rcParams['figure.figsize'] = [12, int(12 * inData.sblts.rides.shape[0] / inData.requests.shape[0])]
@@ -833,7 +795,6 @@ def prepare_PoA(inData):
     m_user_costs = m_user_costs.replace(0, np.nan)
     ranking = m_user_costs.replace(0, np.nan).rank(1, ascending=True, method='first')
 
-
     inData.sblts.rides['rankings'] = inData.sblts.rides.apply(
         lambda ride: [int(ranking.loc[traveller][ride.name]) for traveller in ride.indexes], axis=1)
     inData.sblts.rides['mean_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rankings) / ride.degree, axis=1)
@@ -850,16 +811,14 @@ def prepare_PoA(inData):
     return inData
 
 
-
-
 def calc_solution_PoA(inData):
     indexes = dict()
     utilities = dict()
     for _ in inData.sblts.requests.index:
         indexes[_] = list()
         utilities[_] = list()
-    for i,row in inData.sblts.rides.iterrows():
-        for j,traveller in enumerate(row.indexes):
+    for i, row in inData.sblts.rides.iterrows():
+        for j, traveller in enumerate(row.indexes):
             indexes[traveller] += [i]
             utilities[traveller] += [row.u_paxes[j]]
 
@@ -867,6 +826,7 @@ def calc_solution_PoA(inData):
     inData.sblts.requests['ride_utilities'] = pd.Series(utilities)
     inData.sblts.requests['min_utility'] = inData.sblts.requests['ride_utilities'].apply(lambda x: min(x))
     inData.sblts.requests['PoA'] = inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']
-    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility'])/inData.sblts.requests['min_utility']
-    #inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
+    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']) / \
+                                            inData.sblts.requests['min_utility']
+    # inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
     return inData
