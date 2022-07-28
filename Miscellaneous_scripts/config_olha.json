@@ -1,0 +1,6 @@
+{
+	"variable": "shared_discount",
+	"values": [0.2, 0.24, 0.28],
+	"initial_parameters": "Miscellaneous_scripts/initial_config.json",
+	"path_results": "data/"
+}
