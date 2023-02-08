@@ -1,12 +1,4 @@
-import pickle
-import networkx as nx
-import pandas as pd
-from netwulf import visualize
-import json
-import numpy as np
-import utils_topology as ut
-import matplotlib.pyplot as plt
-import datetime
+from Utils import utils_topology as ut
 
 e = ut.read_pickle('data/results/06-06-22/rep_graphs_06-06-22.obj')
 topological_config = ut.get_parameters('data/configs/topology_settings.json')
