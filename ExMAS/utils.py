@@ -631,8 +631,8 @@ def mode_choices(_inData, sp):
     :param sp:
     :return:
     """
-    rides = _inData.sblts.rides
-    r = _inData.sblts.requests
+    rides = _inData.exmas.rides
+    r = _inData.exmas.requests
 
     def get_probs(row, col='u_paxes'):
         prob_SR = list()
@@ -649,7 +649,7 @@ def mode_choices(_inData, sp):
     rides['prob'] = rides.apply(lambda x: get_probs(x), axis=1)  # MNL probabilities to go for shared
     rides['max_prob_PT'] = rides.apply(lambda x: 0 if len(x.indexes) == 1 else max(x.prob_PT), axis=1)
     rides = rides[rides.max_prob_PT < 0.4]  # cut off function - dummy
-    _inData.sblts.rides = rides
+    _inData.exmas.rides = rides
     return _inData
 
 
@@ -716,7 +716,7 @@ def make_graph(requests, rides,
     """
     Creates a nextworkx shareability graph and plots it if needed
     :param requests: inData.requests
-    :param rides: inData.sblts.rides or inData.sblts.schedule - depending if we want results of matching or potential shareability
+    :param rides: inData.exmas.rides or inData.exmas.schedule - depending if we want results of matching or potential shareability
     :param mu: parameters for probabilites, not used
     :param plot: flag to plot the graph (may take time for big networks)
     :param figname: name to save fig
@@ -772,9 +772,9 @@ def make_graph(requests, rides,
 
 
 def prepare_PoA(inData):
-    m = np.vstack(inData.sblts.rides['row'].values).T  # creates a numpy array for the constrains
+    m = np.vstack(inData.exmas.rides['row'].values).T  # creates a numpy array for the constrains
     m = pd.DataFrame(m).astype(int)
-    plt.rcParams['figure.figsize'] = [12, int(12 * inData.sblts.rides.shape[0] / inData.requests.shape[0])]
+    plt.rcParams['figure.figsize'] = [12, int(12 * inData.exmas.rides.shape[0] / inData.requests.shape[0])]
     fig, ax = plt.subplots()
     ax.imshow(m, cmap='Greys', interpolation='Nearest')
     ax.set_ylabel('rides')
@@ -785,9 +785,9 @@ def prepare_PoA(inData):
 
     m_user_costs = m.copy()
     for col in m.columns:
-        new_col = [0] * inData.sblts.rides.shape[0]
-        indexes = inData.sblts.rides.loc[col]['indexes']
-        u_paxes = inData.sblts.rides.loc[col].u_paxes
+        new_col = [0] * inData.exmas.rides.shape[0]
+        indexes = inData.exmas.rides.loc[col]['indexes']
+        u_paxes = inData.exmas.rides.loc[col].u_paxes
         for l, i in enumerate(indexes):
             new_col[i] = u_paxes[l]
         m_user_costs[col] = new_col
@@ -795,38 +795,85 @@ def prepare_PoA(inData):
     m_user_costs = m_user_costs.replace(0, np.nan)
     ranking = m_user_costs.replace(0, np.nan).rank(1, ascending=True, method='first')
 
-    inData.sblts.rides['rankings'] = inData.sblts.rides.apply(
+    inData.exmas.rides['rankings'] = inData.exmas.rides.apply(
         lambda ride: [int(ranking.loc[traveller][ride.name]) for traveller in ride.indexes], axis=1)
-    inData.sblts.rides['mean_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rankings) / ride.degree, axis=1)
+    inData.exmas.rides['mean_ranking'] = inData.exmas.rides.apply(lambda ride: sum(ride.rankings) / ride.degree, axis=1)
     rel_ranking = ranking.div(ranking.max(axis=1), axis=0)
-    inData.sblts.rides['rel_rankings'] = inData.sblts.rides.apply(
+    inData.exmas.rides['rel_rankings'] = inData.exmas.rides.apply(
         lambda ride: [rel_ranking.loc[traveller][ride.name] for traveller in ride.indexes], axis=1)
-    inData.sblts.rides['mean_rel_ranking'] = inData.sblts.rides.apply(lambda ride: sum(ride.rel_rankings) / ride.degree,
+    inData.exmas.rides['mean_rel_ranking'] = inData.exmas.rides.apply(lambda ride: sum(ride.rel_rankings) / ride.degree,
                                                                       axis=1)
-    inData.sblts.rides['PoA'] = inData.sblts.rides.apply(
+    inData.exmas.rides['PoA'] = inData.exmas.rides.apply(
         lambda ride: [m_user_costs.loc[traveller][ride.name] - m_user_costs.loc[traveller].min() for traveller in
                       ride.indexes], axis=1)
-    inData.sblts.rides['mean_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
-    inData.sblts.rides['total_PoA'] = inData.sblts.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
+    inData.exmas.rides['mean_PoA'] = inData.exmas.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
+    inData.exmas.rides['total_PoA'] = inData.exmas.rides.apply(lambda ride: sum(ride.PoA) / ride.degree, axis=1)
     return inData
 
 
 def calc_solution_PoA(inData):
     indexes = dict()
     utilities = dict()
-    for _ in inData.sblts.requests.index:
+    for _ in inData.exmas.requests.index:
         indexes[_] = list()
         utilities[_] = list()
-    for i, row in inData.sblts.rides.iterrows():
+    for i, row in inData.exmas.rides.iterrows():
         for j, traveller in enumerate(row.indexes):
             indexes[traveller] += [i]
             utilities[traveller] += [row.u_paxes[j]]
 
-    inData.sblts.requests['ride_indexes'] = pd.Series(indexes)
-    inData.sblts.requests['ride_utilities'] = pd.Series(utilities)
-    inData.sblts.requests['min_utility'] = inData.sblts.requests['ride_utilities'].apply(lambda x: min(x))
-    inData.sblts.requests['PoA'] = inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']
-    inData.sblts.requests['PoA_relative'] = (inData.sblts.requests['u_sh'] - inData.sblts.requests['min_utility']) / \
-                                            inData.sblts.requests['min_utility']
-    # inData.sblts.requests['ranking'] = inData.sblts.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
+    inData.exmas.requests['ride_indexes'] = pd.Series(indexes)
+    inData.exmas.requests['ride_utilities'] = pd.Series(utilities)
+    inData.exmas.requests['min_utility'] = inData.exmas.requests['ride_utilities'].apply(lambda x: min(x))
+    inData.exmas.requests['PoA'] = inData.exmas.requests['u_sh'] - inData.exmas.requests['min_utility']
+    inData.exmas.requests['PoA_relative'] = (inData.exmas.requests['u_sh'] - inData.exmas.requests['min_utility']) / \
+                                            inData.exmas.requests['min_utility']
+    # inData.exmas.requests['ranking'] = inData.exmas.requests.apply(lambda x: int(ranking.loc[x.name][x.ride_id]),axis =1)
     return inData
+
+
+def load_nyc_csv(_inData, _params):
+    # loads the csv with trip requests
+    # filter for the trips within a predefined time window (either exact, or a batch with a given frequency)
+    try:
+        _params.paths.nyc_requests
+    except:
+        raise Exception("no nyc trips data path specified")
+
+
+    trips = pd.read_csv(_params.paths.nyc_requests, index_col=0)  # load csv (prepared in the other notebook)
+    trips.pickup_datetime = pd.to_datetime(trips.pickup_datetime)  # convert to times
+
+    # A: Filter for simulation times
+    if _params.get('freq', 'False'):  # given frequency (default '10min')
+        batches = trips.groupby(pd.Grouper(key='pickup_datetime', freq=_params.get('freq', '10min')))
+        if _params.get('batch', 'False'): # i-th batch
+            batch = list(batches.groups.keys())[_params.batch]  # particular batch
+        else:  # random 'freq'-minute batch
+            batch = random.choice(list(batches.groups.keys())) # random batch
+        df = batches.get_group(batch)
+    else:  # exact date and sim-time
+        early = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00")
+        late = pd.to_datetime(_params.date) + pd.to_timedelta(_params.t0 + ":00") + pd.to_timedelta(_params.simTime,
+                                                                                                  unit='H')
+        df = trips[(trips.pickup_datetime >= early) & (trips.pickup_datetime < late)]
+
+    # B: Populate missing fields
+
+    df['status'] = 0
+    df.pos = df['origin']
+    _inData.passengers = df
+    requests = df
+    requests['dist'] = requests.apply(lambda request: _inData.skim.loc[request.origin, request.destination], axis=1)
+    requests['treq'] = (trips.pickup_datetime - trips.pickup_datetime.min())
+    requests['ttrav'] = requests.apply(lambda request: pd.Timedelta(request.dist, 's').floor('s'), axis=1)
+    # requests.ttrav = pd.to_timedelta(requests.ttrav)
+    # if params.get('avg_speed',False):
+    #    requests.ttrav = (pd.to_timedelta(requests.ttrav) / _params.avg_speed).dt.floor('1s')
+    requests.tarr = [request.pickup_datetime + request.ttrav for _, request in requests.iterrows()]
+    requests = requests.sort_values('treq')
+    requests['pax_id'] = requests.index.copy()
+    _inData.requests = requests
+    _inData.passengers.pos = _inData.requests.origin
+    _params.nP = _inData.requests.shape[0]
+    return _inData
