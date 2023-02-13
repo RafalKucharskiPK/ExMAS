@@ -21,7 +21,7 @@ os.chdir(os.path.dirname(os.getcwd()))
 
 if __name__ == "__main__":
     """ Load all the topological parameters """
-    topological_config = utils.get_parameters('Topology/data/configs/topology_settings_no_random.json')
+    topological_config = utils.get_parameters('Topology/data/configs/nyc_prob_coeffs.json')
 
     """ Set up varying parameters (optional) """
     # topological_config.variable = 'shared_discount'
@@ -57,17 +57,17 @@ if __name__ == "__main__":
     #                                                                              ((7.78 / 3600, 1.18),
     #                                                                               (s * 0.778 / 3600, s * 0.118)))
     #
-    # params.sampling_function = utils.mixed_discrete_norm_distribution_with_index((0.29, 0.57, 0.81, 1),
-    #                                                                              ((16.98 / 3600, 1.22),
-    #                                                                               (0.31765 / 3600, 0.0815)),
-    #                                                                              ((14.02 / 3600, 1.135),
-    #                                                                               (0.2058 / 3600, 0.07056)),
-    #                                                                              ((26.25 / 3600, 1.049),
-    #                                                                               (5.7765 / 3600, 0.06027)),
-    #                                                                              ((7.78 / 3600, 1.18),
-    #                                                                               (1 / 3600, 0.07626)))
+    params.sampling_function = utils.mixed_discrete_norm_distribution_with_index((0.29, 0.57, 0.81, 1),
+                                                                                 ((16.98 / 3600, 1.22),
+                                                                                  (0.31765 / 3600, 0.0815)),
+                                                                                 ((14.02 / 3600, 1.135),
+                                                                                  (0.2058 / 3600, 0.07056)),
+                                                                                 ((26.25 / 3600, 1.049),
+                                                                                  (5.7765 / 3600, 0.06027)),
+                                                                                 ((7.78 / 3600, 1.18),
+                                                                                  (1 / 3600, 0.07626)))
 
-    # utils.display_text(params, is_dotmap=True)
+    utils.display_text(params, is_dotmap=True)
 
 
 
