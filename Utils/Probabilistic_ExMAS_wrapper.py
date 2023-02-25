@@ -21,7 +21,7 @@ os.chdir(os.path.dirname(os.getcwd()))
 
 if __name__ == "__main__":
     """ Load all the topological parameters """
-    topological_config = utils.get_parameters('Topology/data/configs/nyc_prob_coeffs.json')
+    topological_config = utils.get_parameters('Topology/data/configs/nyc_study_init_config.json')
 
     """ Set up varying parameters (optional) """
     # topological_config.variable = 'shared_discount'
