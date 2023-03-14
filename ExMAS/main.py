@@ -191,8 +191,9 @@ def single_rides(_inData, params):
     else:
         _inData.logger.warn('VoT predefined')
 
-
     req['delta'] = f_delta()  # assign maximal delay in seconds
+    if params.get('max_delay', False):
+        req.loc[req.delta > params.max_delay, 'delta'] = params.max_delay # fixed, uniform max. delay applied by platform
     req['u'] = params.price * req.dist / 1000 + req.VoT * req.ttrav
     req = req.sort_values(['treq', 'pax_id'])  # sort
     if params.get('reset_ttrav', True):
