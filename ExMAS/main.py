@@ -181,7 +181,7 @@ def single_rides(_inData, params):
         # reset times, reindex
         t0 = req.treq.min() # set 0 as the earliest departure time
         req.treq = (req.treq - t0).dt.total_seconds().astype(int)  # recalc times for seconds starting from zero
-        req.ttrav = req.ttrav.dt.total_seconds().divide(params.avg_speed).astype(int)  # recalc travel times using speed
+        req.ttrav = req.ttrav.dt.total_seconds().astype(int)  # recalc travel times using speed
 
     if 'VoT' not in req.columns:
         if params.get('VoT_std', False):
