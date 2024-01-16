@@ -59,12 +59,13 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import pulp
+import warnings
 
 import matplotlib.pyplot as plt
 
 
 pd.options.mode.chained_assignment = None
-np.warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore')
 
 
 ##########
@@ -1009,7 +1010,10 @@ def match(im, r, params, plot=False, make_assertion=True, logger = None, mutuall
 
             j += 1
             prob += pulp.lpSum(variables[exclusive[0]]+variables[exclusive[1]])<=1, 'mutually_exclusive' + str(j)
-    solver = pulp.get_solver('PULP_CBC_CMD')
+    try:
+        solver = pulp.get_solver('PULP_CBC_CMD')
+    except AttributeError:
+        solver = pulp.getSolver('PULP_CBC_CMD')
     solver.msg = params.get('solver_logger',False)
     prob.solve(solver)  # main otpimization call
 
@@ -1180,10 +1184,18 @@ def fleet_size(requests):
     requests = requests.sort_values('start')
     pickups = requests.set_index('start')
     pickups['starts'] = 1
-    ret = pickups.resample('60s').sum().cumsum()[['starts']]
+    try:
+        ret = pickups.resample('60s').sum().cumsum()[['starts']]
+    except TypeError:
+        temp_stamps = list(pickups.resample('60s'))
+        ret = pd.DataFrame({'starts': np.cumsum([len(t[1]) for t in temp_stamps])}, index=[t[0] for t in temp_stamps])
     dropoffs = requests.set_index('end')
     dropoffs['ends'] = 1
-    d = dropoffs.resample('60s').sum().ends.cumsum()
+    try:
+        d = dropoffs.resample('60s').sum().ends.cumsum()
+    except TypeError:
+        temp_stamps = list(dropoffs.resample('60s'))
+        d = pd.DataFrame({'ends': np.cumsum([len(t[1]) for t in temp_stamps])}, index=[t[0] for t in temp_stamps])
     ret = ret.join(d, how='outer')
     ret.starts = ret.starts.fillna(ret.starts.max())
     ret.ends = ret.ends.fillna(0)

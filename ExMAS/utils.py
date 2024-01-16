@@ -8,6 +8,7 @@ import os
 # utils
 import json
 import random
+import logging
 import math
 from dotmap import DotMap
 from datetime import timedelta, datetime
@@ -16,7 +17,10 @@ import pandas as pd
 import osmnx as ox
 import networkx as nx
 import numpy as np
-from osmnx.distance import get_nearest_node
+try:
+    from osmnx.distance import get_nearest_node
+except:
+    from osmnx.distance import nearest_nodes as get_nearest_node
 import matplotlib.pyplot as plt
 
 # DataFrame skeletons
@@ -50,6 +54,28 @@ KPIs_descriptions = ['total travel time of vehicles (with travellers only)',
                      'as above yet in non-shared scenarion ',
                      'maximal discount to be offered while profitable',
                      'sys',
+                     'sys']
+KPIs_descriptions2 = ['total travel time of vehicles (with travellers only)',
+                     'as above yet in non-shared scenarion ',
+                     'total travel time of passengers',
+                     'as above yet in non-shared scenarion ',
+                     'total (dis)utility of passengers',
+                     'as above yet in non-shared scenarion ',
+                     'mean vehicle cost reduction (lambda) over shared rides',
+                     'total fares paid by travellers sharing',
+                     'as above yet in non-shared scenarion ',
+                     'relative revenue reduction',
+                     'number of trips',
+                     'number of single rides in the solution',
+                     '2nd degree rides in the solution',
+                     '3rd degree rides in the solution',
+                     '4th degree rides in the solution',
+                     '5th degree rides in the solution',
+                     'rides of degree greater than 5 in the solution',
+                     'what portion of rides were shared',
+                     'proxy for the fleet size (lower bound)',
+                     'as above yet in non-shared scenarion ',
+                     'maximal discount to be offered while profitable',
                      'sys']
 
 # definitions for KPIs
@@ -389,7 +415,10 @@ def networkstats(inData):
     center_x = pd.DataFrame((inData.G.nodes(data='x')))[1].mean()
     center_y = pd.DataFrame((inData.G.nodes(data='y')))[1].mean()
 
-    nearest = get_nearest_node(inData.G, (center_y, center_x))
+    try:
+        nearest = get_nearest_node(inData.G, (center_y, center_x))
+    except TypeError:
+        nearest = get_nearest_node(inData.G, center_x, center_y)
     ret = DotMap({'center': nearest, 'radius': inData.skim[nearest].quantile(0.75)})
     return ret
 
@@ -658,7 +687,10 @@ def synthetic_demand_poly(_inData, _params=None):
     Centers = pd.DataFrame(data={'name': ['Dam Square', 'Station Zuid', 'Concertgebouw', 'Sloterdijk'],
                                  'x': [4.8909126, 4.871887, 4.8790061, 4.8351158],
                                  'y': [52.373095, 52.338948, 52.356275, 52.3888349]})
-    Centers['node'] = Centers.apply(lambda center: get_nearest_node(_inData.G, (center.y, center.x)), axis=1)
+    try:
+        Centers['node'] = Centers.apply(lambda center: get_nearest_node(_inData.G, (center.y, center.x)), axis=1)
+    except TypeError:
+        Centers['node'] = Centers.apply(lambda center: get_nearest_node(_inData.G, center.x, center.y), axis=1)
 
     # drop not considered centers
     Centers = Centers[Centers.index.isin(range(_params.nCenters))]
@@ -1048,11 +1080,11 @@ def read_csv_lists(df, cols=None):
 
 def create_input_dotmap(
         requests: pd.DataFrame,
-        params: dotmap.DotMap,
+        params: DotMap,
         data_provided: dict or None = None,
         logger: logging.Logger or None = None,
         **kwargs
-) -> (dotmap.DotMap, dotmap.DotMap):
+) -> (DotMap, DotMap):
     """
     Function designed to translate a dataframe with origins, destinations and times
     to the suitable ExMAS format
@@ -1077,7 +1109,7 @@ def create_input_dotmap(
     results = ExMAS.main(dotmap_data, params_nyc, False)
     """
 
-    dataset_dotmap = dotmap.DotMap()
+    dataset_dotmap = DotMap()
     dataset_dotmap['passengers'] = pd.DataFrame(columns=['id', 'pos', 'status'])
     dataset_dotmap.passengers = dataset_dotmap.passengers.set_index('id')
     dataset_dotmap['requests'] = pd.DataFrame(
