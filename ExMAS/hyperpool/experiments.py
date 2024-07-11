@@ -16,7 +16,7 @@ Rafał Kucharski, TU Delft,GMUM UJ  2021 rafal.kucharski@uj.edu.pl
 
 
 
-from ExMAS.transitize.main import pipeline
+from ExMAS.hyperpool.main import pipeline
 from dotmap import DotMap
 from ExMAS.experiments import *
 

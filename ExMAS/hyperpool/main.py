@@ -24,8 +24,8 @@ import math
 from dotmap import DotMap
 import ExMAS.utils
 from ExMAS.main import matching
-from ExMAS.transitize.analysis import process_transitize
-from ExMAS.transitize.visualizations import make_schedule
+from ExMAS.hyperpool.analysis import process_transitize
+from ExMAS.hyperpool.visualizations import make_schedule
 
 """
 inData.transitize. 
